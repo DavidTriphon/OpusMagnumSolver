@@ -1,0 +1,21 @@
+07/21
+Area solver:
+
+If the search is like a typical search, evaluating the cost to reach nodes that represent state along the path to the solution, then the cost is the sum of the area used so far.
+But because which hexes have been used already is part of the state, there emerges a problem of overlapping sub problems.
+Maybe to alleviate this, multiple different costs could be tracked for meeting up with a certain board state? Like, this path reached this same board state using (3,4) and (5,7) when the other path to this space used (1,2). This would be important if later on a path from this space used (3,4) and not (1,2). This means that nodes could have MULTIPLE previous nodes as the graph is explored.
+
+Cycle optimizer for cost solver:
+Start stupid. Use djikstras algorithm with board state being large. Calculate atoms every frame. Let the arm do anything and everything. Don’t use a heuristic based on arm movement space.
+
+Later, we’ll optimize it using a heuristic to measure the number of operations that still need to be performed. Note that parallel operations do not sum for a minimum possible cost (Salt and bonding). once we figure that out, we can add heuristics to that based on space that increase those min heuristics to be more smart. Multiple layers of conceptual space will give multiple layers of heuristics. Optimize after we’ve identified where it is slow.
+
+Bidirectional search will require some kinds of propagation or overlapping problem solving. Working forwards only has one outcome. But if a bond passes over a binder backwards in time, it could have come from multiple states. It could have already been bonded, or it might have been unbounded before that. Alternatively, a salt atom passing over a calcified could have been a salt before, or it could have been an element. Backtracking this separately would be redoing work since the structure would be the same but the atom could be anything.
+There would be new rules for legality. It would not be legal to move a bond backwards in time onto a debonder. It would also be illegal to move backwards in time an element onto a calcifier. Or two unbounded atoms onto a bonder.
+
+The timeframe/grid obj needs to be implemented so I can start implementing the collision check code.
+
+Solving for cycles for multiple Products is like solving for the same maze multiple times, but every time you reach the Other side, you restart on the opposite side, but with the same x coordinate. If before you get all the products, you enter into an equilibrium, you don’t need to keep solving. An equilibrium is when you have the same X coordinate on the start and end side.
+An equilibrium could also be when you run into your previous path.
+
+State transitions that have cost by are always guaranteed to be available could be considered Substate to reduce overlapping sub problems in the graph for searching. For example: released arms don’t have restrictions for movement are guaranteed edge traversal (if considered to be separate nodes). These multiple nodes could be collapsed into one node and then have multiple previous nodes for their arrival states. I’m not set on this idea quite yet, but it could massively reduce the number of nodes to explore, while complicating calculating cost by making it relative to paths, like for area solver.

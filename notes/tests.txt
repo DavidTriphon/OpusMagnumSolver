@@ -1,0 +1,44 @@
+notable tests for monitoring
+
+- sample 065:
+    salt-fire + salt => fire-salt + fire-fire
+    no duplication
+    calcification is not needed
+    second reagent is useless
+    first product matches first reagent
+
+- test 070:
+    earth + fire + water + air => QE-Air-Fire
+    unification (and dispersion)
+
+- test 128:
+    lead-iron ==> silver
+    just purification
+
+- test 187:
+    earth + fire + salt => salt-salt
+    duplication
+        cost strategy means only salt reagent is optimal
+        basically 1-2 base test with optimizations
+
+- test 276:
+    1 air => 3 air + 9 salt
+    partial calcification
+    no duplication
+    12:1 ratio
+
+- test 391
+    water => salt-salt-salt-water
+    very simple base case for a cost-focused solver
+
+- test 435:
+    1 fire => 1 fire + 4 salt
+    partial calcification
+    no duplication
+    5:1 ratio
+
+- test 464:
+    6 elements => 1 salt
+    all calcification
+    no duplication
+    1:6 ratio

@@ -1,0 +1,29 @@
+
+=== cycle strategy ===
+
+two phases:
+    A. determine optimal manufacture time and order
+    B. search through the spacial and temporal constraints to find a valid
+    assembly configuration
+
+exceptions:
+    - there is not enough space to make certain transitions within the allotted
+    free time.
+    - remaining compute time is limited, use another algorithm that does not
+    guarantee the best metric but does guarantee that a solution will be found
+    quickly.
+
+possible intervening points:
+    assert a manufacture schedule and operation order per single product
+
+=== cost strategy ===
+
+1. determine minimum recipe parts required
+2. determine number of spaces required accessible by arms
+3. determine the lowest cost arm setup for that number of spaces
+4. determine a placement that appears to be the least restrictive
+5. search through possible molecule operation orders that fit within the space
+5. program the arms to create the product using the set operation order
+
+exceptions:
+    - too many reagents to handle with one arm
