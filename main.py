@@ -117,39 +117,20 @@ def main_investigate_puzzle():
     solution = not_a_solution(puzzle)
     solution.write_to_path("output\\24hour-1-sample\\GEN000-test.solution")
 
-player_instrs = [
-    om.Instruction.GRAB,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.DROP,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.GRAB,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.PIVOT_CW,
-    om.Instruction.PIVOT_CW,
-    om.Instruction.DROP,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.GRAB,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.PIVOT_CW,
-    om.Instruction.PIVOT_CW,
-    om.Instruction.DROP,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.GRAB,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.PIVOT_CW,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.ROTATE_CCW,
-    om.Instruction.DROP,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.ROTATE_CW,
-    om.Instruction.ROTATE_CW,
-]
+
+def omsim_record_save(puzzle, solution):
+    solve_sim = om.Sim(puzzle=puzzle, solution=solution)
+
+    try:
+        sim_cost = solve_sim.metric("cost")
+        sim_cycles = solve_sim.metric("cycles")
+        sim_area = solve_sim.metric("area")
+        solution_filename = "%s_%dg_%dc_%da.solution" % (
+            puzzle.name.decode("utf-8"), sim_cost, sim_cycles, sim_area)
+        solution.write_to_path(puzzledb.OUTPUT_PATH / solution_filename)
+    except om.SimError as e:
+        print("solution was found invalid by solution:")
+        print(e)
 
 
 def create_391_solve_partlist():
@@ -171,12 +152,12 @@ def main_create_cost_solve_391():
     puzzle = puzzles[391]
 
     # create solution parameters
-    solution_name = "cost prototype"
+    solution_name = "cost_prototype"
 
     #   create solution object
     solution = om.Solution(
         puzzle=puzzle.name,
-        name=bytes(solution_name, "utf-8"),
+        name=bytes(solution_name.replace("_", " "), "utf-8"),
         parts=create_391_solve_partlist()
     )
 
@@ -224,7 +205,7 @@ def main_create_cost_solve_391():
     solution_filename = "%s_%s.solution" % (
         puzzle.name.decode("utf-8"), solution_name)
     solution.write_to_path(puzzledb.SAVEDATA_PATH / solution_filename)
-    solution.write_to_path(puzzledb.OUTPUT_PATH / solution_filename)
+    omsim_record_save(puzzle, solution)
 
 
 if __name__ == '__main__':
