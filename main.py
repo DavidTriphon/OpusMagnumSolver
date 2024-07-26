@@ -184,9 +184,20 @@ def main_create_cost_solve_391():
     start_frame = grid.Frame(puzzle=puzzle, parts=create_391_solve_partlist())
     start_frame.iterate({})
 
+    def output_heuristic(frame):
+        if frame.products[0] > 0:
+            return 0
+        salts = len([a for a in frame.atoms if a.type == om.Atom.SALT])
+        waters = len([a for a in frame.atoms if a.type == om.Atom.WATER])
+        atoms = len(frame.atoms)
+        bonds = len(frame.bonds)
+        return (max(0, 3-bonds) + max(0, 5-atoms) + max(0, 3-salts) +
+                max(0, 2-waters))
+
     # instruction path to product output
     product_instructions, output_frame, output_cost = start_frame.search(
-        satisfy_condition=lambda f: f.products[0] >= 1
+        satisfy_condition=lambda f: f.products[0] >= 1,
+        heuristic=output_heuristic
     )
     # instruction path to reset
     return_instructions, end_frame, return_cost = output_frame.search(

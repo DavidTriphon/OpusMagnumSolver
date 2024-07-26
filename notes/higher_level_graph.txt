@@ -1,0 +1,32 @@
+nodes are sets of molecules
+
+resources available per neighbor:
+    parts from partlist
+
+    movements are not exclusive resources
+    area overlap on parts is exclusive
+    this makes part usage exclusive
+
+actions are:
+    add reagent:
+        1 reagent input part
+        1 arm (1 grab)
+    bond
+        1 bonder
+        2 atoms on bonder
+        1-2 movements
+            1+ arms per movement
+    debond
+        1 debonder
+        1 movement
+            1 arm
+    calcify
+        1 calcification
+        1 atom on calcifier
+        1 movement
+            1 arm
+    remove product:
+        1 product output part
+        1 drop
+            1 arm per drop (all grabbed arms must drop)
+
