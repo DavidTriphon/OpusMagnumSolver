@@ -1,0 +1,7 @@
+test 391:
+    - naive djikstra, no heuristic:
+        nodes/frames explored: 140k
+        duration: ~86.7 seconds
+    - a_star, inconsistent & unmeasured heuristic:
+        nodes/frames explored: 56k (60% reduction from previous)
+        duration: ~31.2 seconds

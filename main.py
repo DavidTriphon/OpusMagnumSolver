@@ -2,7 +2,7 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 import analysis
-import grid
+import frame
 import puzzledb
 import recipes
 import puzzleparts

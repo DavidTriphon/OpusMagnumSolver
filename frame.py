@@ -49,6 +49,8 @@ class Frame:
                 for part in self.parts]
         )
 
+    # adders
+
     def add_molecule(self, molecule: om.Molecule, position: tuple = (0, 0),
             rotation: int = 0):
         # duplicate atoms
@@ -70,6 +72,8 @@ class Frame:
 
     def add_part(self, part: om.Part):
         self.parts.append(part.copy())
+
+    # getters
 
     def get_atom(self, pos: Pos2D) -> om.Atom | None:
         return next((a for a in self.atoms if pos == a.position), None)
@@ -107,6 +111,69 @@ class Frame:
     def get_step2_parts(self) -> list[om.Part]:
         return [part for part in self.parts
             if part.name in om.Part.PARTS_CONSUMERS]
+
+    def get_molecules(self) -> list[om.Molecule]:
+        linked_atoms = {
+            atom.position: {atom}
+            for atom in self.atoms
+        }
+        for bond in self.bonds:
+            pos0 = bond.positions[0]
+            pos1 = bond.positions[1]
+            union = linked_atoms[pos0] | linked_atoms[pos1]
+            for atom in union:
+                linked_atoms[atom.position] = union
+        groups = set(frozenset(group) for group in linked_atoms.values())
+        molecules = [
+            om.Molecule(
+                atoms=list(group),
+                bonds=[
+                    bond for bond in self.bonds
+                    if any(atom.position in bond.positions for atom in group)
+                ]
+            )
+            for group in groups
+        ]
+        assert sum(len(molecule.bonds) for molecule in molecules) == len(
+            self.bonds)
+        assert sum(len(molecule.atoms) for molecule in molecules) == len(
+            self.atoms)
+
+        return molecules
+
+    def get_simplified_rep(self):
+        mol_count = len(self.get_molecules())
+
+        atom_type_count_tuples = tuple(
+            ("Atom:" + om.Atom.TYPE_NAMES[a_type], count)
+            for (a_type, count) in self.count_atom_types()
+        )
+        bond_type_count_tuples = tuple(
+            ("Bond:" + om.Bond.type_name(b_type), count)
+            for (b_type, count) in self.count_bond_types()
+        )
+        return tuple(sorted(
+            atom_type_count_tuples +
+            bond_type_count_tuples +
+            (("Molecules", mol_count),)
+        ))
+
+    def count_looping_bonds(self):
+        return len(self.get_molecules()) - (len(self.atoms) - len(self.bonds))
+
+    def count_atom_types(self):
+        counts = {}
+        for atom in self.atoms:
+            counts[atom.type] = counts.get(atom.type, 0) + 1
+        return counts
+
+    def count_bond_types(self):
+        counts = {}
+        for bond in self.bonds:
+            counts[bond.type] = counts.get(bond.type, 0) + 1
+        return counts
+
+    # evaluators
 
     def overlaps_track(self, pos: Pos2D):
         track_parts = self.get_parts_in_set({om.Part.TRACK})
@@ -149,34 +216,7 @@ class Frame:
         # after everything else, it's valid
         return True
 
-    def identify_molecules(self) -> list[om.Molecule]:
-        linked_atoms = {
-            atom.position: {atom}
-            for atom in self.atoms
-        }
-        for bond in self.bonds:
-            pos0 = bond.positions[0]
-            pos1 = bond.positions[1]
-            union = linked_atoms[pos0] | linked_atoms[pos1]
-            for atom in union:
-                linked_atoms[atom.position] = union
-        groups = set(frozenset(group) for group in linked_atoms.values())
-        molecules = [
-            om.Molecule(
-                atoms=list(group),
-                bonds=[
-                    bond for bond in self.bonds
-                    if any(atom.position in bond.positions for atom in group)
-                ]
-            )
-            for group in groups
-        ]
-        assert sum(len(molecule.bonds) for molecule in molecules) == len(
-            self.bonds)
-        assert sum(len(molecule.atoms) for molecule in molecules) == len(
-            self.atoms)
-
-        return molecules
+    # complicated and important methods
 
     def search(self, match_frame=None, satisfy_condition=None, heuristic=None):
         if match_frame is not None:
@@ -190,6 +230,7 @@ class Frame:
         frame_cost: dict[Frame, int] = {self: 0}
         frontier_queue: list[tuple[int, Frame]] = [(h(self), self)]
         explored: set[Frame] = set()
+        explored_simplified: set[tuple] = set()
         came_from: dict[Frame, tuple[Frame, dict[int, bytes]]] = dict()
 
         def instruction_path(frame):
@@ -213,6 +254,9 @@ class Frame:
             current_frame = frontier_queue.pop()[1]
             if current_frame not in explored:
                 explored.add(current_frame)
+                simp_rep = current_frame.get_simplified_rep()
+                if simp_rep not in explored_simplified:
+                    explored_simplified.add(simp_rep)
                 # exit when the goal is found
                 if satisfy_condition(current_frame):
                     return (instruction_path(current_frame),
@@ -222,7 +266,8 @@ class Frame:
                     neighbor_cost = frame_cost[current_frame] + 1
                     if neighbor_cost < frame_cost.get(neighbor_frame, math.inf):
                         frame_cost[neighbor_frame] = neighbor_cost
-                        came_from[neighbor_frame] = (current_frame, neighbot_instrs)
+                        came_from[neighbor_frame] = (
+                            current_frame, neighbot_instrs)
                         if neighbor_frame in explored:
                             explored.remove(neighbor_frame)
                         h_cost = neighbor_cost + h(neighbor_frame)
@@ -271,7 +316,7 @@ class Frame:
 
         # identify what atoms are linked to each other and what bonds are
         # involved
-        molecules = self.identify_molecules()
+        molecules = self.get_molecules()
 
         # identify all rotation and slide movements of molecules
         queue_mol_rotate: set[tuple[om.Molecule, Pos2D, Angle]] = set()
@@ -341,7 +386,7 @@ class Frame:
             out_mol = self.puzzle.products[out.which_reagent_or_product]
             moved_mol = out_mol.copy()
             moved_mol.translate(out.position, out.rotation)
-            matching_mols = [m for m in self.identify_molecules() if
+            matching_mols = [m for m in self.get_molecules() if
                 m == moved_mol]
             if matching_mols:
                 matched = matching_mols[0]
@@ -402,6 +447,8 @@ class Frame:
             return False
 
         return self
+
+    # default methods
 
     def __eq__(self, other):
         if not isinstance(other, Frame):
