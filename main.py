@@ -1,4 +1,5 @@
 from pathlib import Path
+from timeit import default_timer as timer
 
 import analysis
 import grid
@@ -175,16 +176,21 @@ def main_create_cost_solve_391():
         return (max(0, 3-bonds) + max(0, 5-atoms) + max(0, 3-salts) +
                 max(0, 2-waters))
 
+    time_start = timer()
     # instruction path to product output
     product_instructions, output_frame, output_cost = start_frame.search(
         satisfy_condition=lambda f: f.products[0] >= 1,
         heuristic=output_heuristic
     )
+    time_midpoint = timer()
     # instruction path to reset
     return_instructions, end_frame, return_cost = output_frame.search(
         satisfy_condition=lambda f: f.parts == start_frame.parts
     )
+    time_end = timer()
 
+    print("output search duration=%.2f seconds" % (time_midpoint - time_start))
+    print("return search duration=%.2f seconds" % (time_end - time_midpoint))
     print("cost = %d" % (output_cost + return_cost))
 
     # reformat instructions from search into solution format
