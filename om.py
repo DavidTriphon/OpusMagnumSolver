@@ -778,6 +778,33 @@ class Bond:
     TRIPLEX_YELLOW = 1 << 3
     TRIPLEX = TRIPLEX_RED | TRIPLEX_BLACK | TRIPLEX_YELLOW
 
+    @staticmethod
+    def type_name(bond_type):
+        types = []
+        if bond_type & Bond.NORMAL:
+            types.append("Normal")
+        if bond_type & Bond.TRIPLEX:
+            types.append("Triplex")
+        else:
+            if bond_type & Bond.TRIPLEX_RED:
+                types.append("Red")
+            if bond_type & Bond.TRIPLEX_YELLOW:
+                types.append("Yellow")
+            if bond_type & Bond.TRIPLEX_BLACK:
+                types.append("Black")
+
+        if bond_type & ~(Bond.NORMAL | Bond.TRIPLEX):
+            types.append(
+                "Unknown(%d)" % (
+                        bond_type & ~(Bond.NORMAL | Bond.TRIPLEX))
+            )
+
+        if len(types) > 1:
+            type_str = "[%s]" % ", ".join(types)
+        else:
+            type_str = types[0]
+        return type_str
+
     def __init__(self, type: int, positions: tuple[tuple, tuple]):
         self.type: int = type
         self.positions: tuple[tuple[int, int], tuple[int, int]] = \
@@ -793,6 +820,7 @@ class Bond:
             hexmath.translate(self.positions[1], position, rotation)
         )))
         self._hash = None
+
     def rotate(self, pivot: Pos2D, rotation: Angle):
         self.positions = tuple(sorted((
             hexmath.rotate(self.positions[0], rotation, pivot),
@@ -815,30 +843,9 @@ class Bond:
         return "Bond(%r, %r)" % (self.type, self.positions)
 
     def __str__(self):
-        type_str = []
-        if self.type & Bond.NORMAL:
-            type_str.append("Normal")
-        if self.type & Bond.TRIPLEX:
-            type_str.append("Triplex")
-        else:
-            if self.type & Bond.TRIPLEX_RED:
-                type_str.append("Red")
-            if self.type & Bond.TRIPLEX_YELLOW:
-                type_str.append("Yellow")
-            if self.type & Bond.TRIPLEX_BLACK:
-                type_str.append("Black")
-        if self.type & ~(Bond.NORMAL | Bond.TRIPLEX):
-            type_str.append(
-                "Unknown(%d)" % (
-                        self.type & ~(Bond.NORMAL | Bond.TRIPLEX))
-            )
-        if len(type_str) > 1:
-            type_str = '[' + ", ".join(type_str) + ']'
-        else:
-            type_str = ", ".join(type_str)
 
-        return "Bond(%s, %s-%s)" % (type_str, self.positions[0],
-        self.positions[1])
+        return "Bond(%s, %s-%s)" % (Bond.type_name(self.type),
+            self.positions[0], self.positions[1])
 
 
 class ProductionInfo:
