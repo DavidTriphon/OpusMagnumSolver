@@ -3,5 +3,8 @@ test 391:
         nodes/frames explored: 140k
         duration: ~86.7 seconds
     - a_star, inconsistent & unmeasured heuristic:
-        nodes/frames explored: 56k (60% reduction from previous)
-        duration: ~31.2 seconds
+        nodes/frames explored: 54k (60% reduction from previous)
+        duration: ~31.2 seconds (-55 from previous)
+    - optimized rotate function in hexmath:
+        nodes/frames: unchanged
+        duration: ~22 seconds (-10 from previous)

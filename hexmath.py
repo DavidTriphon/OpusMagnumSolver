@@ -35,18 +35,27 @@ def rotate(pos: Pos2D | Pos3D, rot_cw_times_60_deg: Angle,
     # remember to return matching dims for pos
     return3d = (len(pos) == 3)
 
-    # force args into 2d
-    if len(pos) == 3:
-        pos = (pos[0], pos[1])
-    if len(pivot) == 3:
-        pivot = (pivot[0], pivot[1])
+    # force args into 3d
+    pos3 = cube_pos(pos)
+    pivot3 = cube_pos(pivot)
 
-    rotated_pos = tuple((np.matmul(
-        np.subtract(pos, pivot), _rotation_matrices[rot_cw_times_60_deg]
-    ) + pivot).tolist())
+    result = difference(pos3, pivot3)
+
+    rot_m3 = rot_cw_times_60_deg % 3
+    if rot_m3 == 2:
+        result = (result[2], result[0], result[1])
+    elif rot_m3 == 1:
+        result = (result[1], result[2], result[0])
+
+    if rot_cw_times_60_deg % 2 == 1:
+        result = difference((0, 0, 0), result)
+
+    result = summate(result, pivot3)
+
     if return3d:
-        rotated_pos = cube_pos(rotated_pos)
-    return rotated_pos
+        return result
+    else:
+        return result[0], result[1]
 
 
 def cube_pos(pos: Pos2D | Pos3D) -> Pos3D:
