@@ -146,11 +146,11 @@ class Frame:
 
         atom_type_count_tuples = tuple(
             ("Atom:" + om.Atom.TYPE_NAMES[a_type], count)
-            for (a_type, count) in self.count_atom_types()
+            for (a_type, count) in self.count_atom_types().items()
         )
         bond_type_count_tuples = tuple(
             ("Bond:" + om.Bond.type_name(b_type), count)
-            for (b_type, count) in self.count_bond_types()
+            for (b_type, count) in self.count_bond_types().items()
         )
         return tuple(sorted(
             atom_type_count_tuples +

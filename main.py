@@ -163,7 +163,7 @@ def main_create_cost_solve_391():
     )
 
     # create initial start frame of the simulation
-    start_frame = grid.Frame(puzzle=puzzle, parts=create_391_solve_partlist())
+    start_frame = frame.Frame(puzzle=puzzle, parts=create_391_solve_partlist())
     start_frame.iterate({})
 
     def output_heuristic(frame):
