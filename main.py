@@ -1,3 +1,6 @@
+import cProfile
+import pstats
+import traceback
 from pathlib import Path
 from timeit import default_timer as timer
 
@@ -214,5 +217,21 @@ def main_create_cost_solve_391():
     omsim_record_save(puzzle, solution)
 
 
+def profile_code(func, name=None):
+    if name is None:
+        name = func.__name__
+    # > snakeviz ./needs_profiling.prof
+    with cProfile.Profile() as pr:
+        try:
+            func()
+        except Exception as e:
+            traceback.print_exception(e)
+    stats = pstats.Stats(pr)
+    stats.sort_stats(pstats.SortKey.TIME)
+    stats.dump_stats(filename=name + '.prof')
+
+
 if __name__ == '__main__':
     main_create_cost_solve_391()
+    # profile_code(main_create_cost_solve_391)
+
