@@ -7,26 +7,96 @@ resources available per neighbor:
     area overlap on parts is exclusive
     this makes part usage exclusive
 
-actions are:
-    add reagent:
-        1 reagent input part
-        1 arm (1 grab)
-    bond
-        1 bonder
-        2 atoms on bonder
-        1-2 movements
-            1+ arms per movement
-    debond
-        1 debonder
-        1 movement
-            1 arm
-    calcify
-        1 calcification
-        1 atom on calcifier
-        1 movement
-            1 arm
-    remove product:
-        1 product output part
-        1 drop
-            1 arm per drop (all grabbed arms must drop)
+dimensions to count in simplified state tracker:
+    counts of atoms by types
+    count of all atoms
+    counts of bonds by type
+    count of all bonds
+    count of molecules
+    count of looped bonds (mathematically determined by m - a + b)
+    elemental material (quintessence is 4, (vigor and mors) = max(v, m))
+    metal material (scaled according to purification: 1, 2, 4, 8, 16, 32)
 
+
+actions:
+    (all actions implied to take at least 1 cycle (shareable)
+
+    add reagent:
+        effects:
+            + A atoms in molecule
+            + B bonds in molecule
+            + N*X for every N atoms of type X in molecule
+            + 1 molecule
+        requirements:
+            1 reagent input part
+            A area for input part, distinct
+            no other molecule overlapping reagent
+            1 arm (1 grab)
+
+    bond:
+        effects:
+            + 1 bond
+            OR(
+                - 1 molecule
+                + 1 looping bond
+            )
+        requirements:
+            1 bonder
+            2 area for bonder, distinct
+            2 atoms on bonder
+            1-2 movements
+                1+ arms per movement
+
+    debond:
+        effects:
+            - 1 bond
+            OR(
+                + 1 molecule
+                - 1 looping bond
+            )
+        requirements:
+            1 debonder
+            2 area for debonder, distinct
+            2 atoms on debonder
+            1 movement
+                1 arm
+
+    calcify:
+        effects:
+            - 1 X (for whatever element is used)
+            + 1 salt
+        requirements:
+            1 calcification
+            1 area for calcifier, distinct
+            1 atom on calcifier
+            1 movement
+                1 arm
+
+    remove product:
+        effects:
+            - A atoms in molecule
+            - B bonds in molecule
+            - N*X for every N atoms of type X in molecule
+            - 1 molecule
+        requirements:
+            1 product output part
+            A area for output part, distinct
+            product on output part
+            1 movement (1 cycle)
+                1 or more arms gripping product
+            1 drop (1 cycle)
+                1 drop per arm (all grabbed arms must drop)
+
+reverse solve examples:
+    test 391:
+        start:
+            { products = [-1] }
+        solve for products: apply 1 x Output[0]
+            { water = -1, salt = -3, bonds = -3 }
+        solve for bonds: apply 3 x Bonder
+            { water = -1, salt = -3 }
+        solve for salt: apply 3 x Calcifications
+            { water = -4 }
+        solve for water: apply 4 x Input[0]
+            { }
+        SOLVED
