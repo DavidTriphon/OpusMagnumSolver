@@ -228,7 +228,7 @@ def profile_code(func, name=None):
             traceback.print_exception(e)
     stats = pstats.Stats(pr)
     stats.sort_stats(pstats.SortKey.TIME)
-    stats.dump_stats(filename=name + '.prof')
+    stats.dump_stats(filename="profiles\\" + name + '.prof')
 
 
 if __name__ == '__main__':
