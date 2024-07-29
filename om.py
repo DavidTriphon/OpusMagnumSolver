@@ -735,6 +735,7 @@ class Atom:
         QUINTESSENCE: "QUINTESSENCE",
     }
 
+    TYPES = list(range(1, 17))
     TYPES_ELEMENTAL = {AIR, EARTH, FIRE, WATER}
     TYPES_METAL = {LEAD, TIN, IRON, COPPER, SILVER, GOLD}
 
