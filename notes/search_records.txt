@@ -1,5 +1,5 @@
 test 391:
-    - naive djikstra, no heuristic:
+    - naive dijkstra, no heuristic:
         nodes/frames explored: 140k
         duration: ~86.7 seconds
     - a_star, inconsistent & unmeasured heuristic:
@@ -11,3 +11,6 @@ test 391:
     - optimized heuristic, adding an atom reduced heuristc cost by 4 now
         nodes/frames explored: 38k (-16k)
         duration: ~14 seconds (-8 from previous)
+    * alternate heuristic found: overfitted, punishes having 3+ waters
+        nodes/frames explored: 6k (-32k)
+        duration: ~2.5 seconds (-12 from previous)

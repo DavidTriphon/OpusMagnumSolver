@@ -1,4 +1,5 @@
 import cProfile
+import math
 import pstats
 import traceback
 from pathlib import Path
@@ -169,6 +170,22 @@ def main_create_cost_solve_391():
     start_frame = frame.Frame(puzzle=puzzle, parts=create_391_solve_partlist())
     start_frame.iterate({})
 
+    def overfitted_heuristic(frame):
+        if frame.products[0] > 0:
+            return 0
+        salts = len([a for a in frame.atoms if a.type == om.Atom.SALT])
+        waters = len([a for a in frame.atoms if a.type == om.Atom.WATER])
+        atoms = len(frame.atoms)
+        bonds = len(frame.bonds)
+        return (
+                max(0, 3 - bonds)  # 3 bonds take 1 cycle each
+                + 4 * max(0, 2 - waters)  # making a water takes 4 cycles each
+                + 5 * max(0, 3 - salts)  # making a salt takes 1+4 cycles each
+                # punish looping bonds
+                + (math.inf if atoms - bonds <= 1 else 0)
+                + (math.inf if bonds > 3 else 0)  # punish extra bonds
+        )
+
     def output_heuristic(frame):
         if frame.products[0] > 0:
             return 0
@@ -176,7 +193,14 @@ def main_create_cost_solve_391():
         waters = len([a for a in frame.atoms if a.type == om.Atom.WATER])
         atoms = len(frame.atoms)
         bonds = len(frame.bonds)
-        return max(0, 3-bonds) + 4 * max(0, 5-atoms) + max(0, 3-salts)
+        return (
+                max(0, 3 - bonds)  # 3 bonds take 1 cycle each
+                + 4 * max(0, 5 - atoms)  # making an atom takes 4 cycles each
+                + max(0, 3 - salts)  # making a salt takes 1 cycle each
+                # punish looping bonds
+                + (math.inf if atoms - bonds <= 1 else 0)
+                + (math.inf if bonds > 3 else 0)  # punish extra bonds
+        )
 
     time_start = timer()
     # instruction path to product output
@@ -233,4 +257,3 @@ def profile_code(func, name=None):
 if __name__ == '__main__':
     main_create_cost_solve_391()
     # profile_code(main_create_cost_solve_391)
-
