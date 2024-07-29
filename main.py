@@ -176,8 +176,7 @@ def main_create_cost_solve_391():
         waters = len([a for a in frame.atoms if a.type == om.Atom.WATER])
         atoms = len(frame.atoms)
         bonds = len(frame.bonds)
-        return (max(0, 3-bonds) + max(0, 5-atoms) + max(0, 3-salts) +
-                max(0, 2-waters))
+        return max(0, 3-bonds) + 4 * max(0, 5-atoms) + max(0, 3-salts)
 
     time_start = timer()
     # instruction path to product output

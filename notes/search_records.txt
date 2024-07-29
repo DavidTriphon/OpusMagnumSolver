@@ -8,3 +8,6 @@ test 391:
     - optimized rotate function in hexmath:
         nodes/frames: unchanged
         duration: ~22 seconds (-10 from previous)
+    - optimized heuristic, adding an atom reduced heuristc cost by 4 now
+        nodes/frames explored: 38k (-16k)
+        duration: ~14 seconds (-8 from previous)
