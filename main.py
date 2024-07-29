@@ -133,7 +133,7 @@ def omsim_record_save(puzzle, solution):
             puzzle.name.decode("utf-8"), sim_cost, sim_cycles, sim_area)
         solution.write_to_path(puzzledb.OUTPUT_PATH / solution_filename)
     except om.SimError as e:
-        print("solution was found invalid by solution:")
+        print("solution was found invalid by omsim:")
         print(e)
 
 
