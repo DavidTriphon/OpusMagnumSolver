@@ -88,12 +88,12 @@ def filter_bond_types(puzzles, bond_types, func_any_or_all):
     ]
 
 
-def filter_atom_types(puzzles, types, func_any_or_all=all):
+def filter_atom_types(puzzles, types, func_any_or_all=all, negate=False):
     return [
         p for p in puzzles
         if func_any_or_all(
             [
-                type in types
+                type not in types if negate else type in types
                 for type in p.atom_types()
             ]
         )
