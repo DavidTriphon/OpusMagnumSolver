@@ -6,7 +6,7 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 import analysis
-import frame
+from frame import Frame
 import puzzledb
 import recipes
 import puzzleparts
@@ -14,7 +14,7 @@ import display
 import om
 
 
-def not_a_solution(puzzle):
+def not_a_solution(puzzle: om.Puzzle):
     next_pos = (0, 0)
     parts = []
     for i, reagent in enumerate(puzzle.reagents):
@@ -138,6 +138,31 @@ def omsim_record_save(puzzle, solution):
         print(e)
 
 
+class Evaluator:
+
+    def __init__(self, frame: Frame):
+        self.frame = frame
+        self._atoms = None
+        self._bonds = None
+        self._atoms_type = {}
+
+    def atoms(self):
+        if self._atoms is None:
+            self._atoms = len(self.frame.atoms)
+        return self._atoms
+
+    def bonds(self):
+        if self._bonds is None:
+            self._bonds = len(self.frame.bonds)
+        return self._bonds
+
+    def atom_count_type(self, type):
+        if type not in self._atoms_type:
+            self._atoms_type[type] = len(
+                [a for a in self.frame.atoms if a.type == type])
+        return self._atoms_type[type]
+
+
 def create_391_solve_partlist():
     arm_part = om.Part(name=om.Part.ARM1, position=(0, 0), rotation=0,
         length=1, arm_number=0)
@@ -167,39 +192,40 @@ def main_create_cost_solve_391():
     )
 
     # create initial start frame of the simulation
-    start_frame = frame.Frame(puzzle=puzzle, parts=create_391_solve_partlist())
+    start_frame = Frame(puzzle=puzzle, parts=create_391_solve_partlist())
     start_frame.iterate({})
 
-    def overfitted_heuristic(frame):
+    def overfitted_heuristic(frame: Frame):
         if frame.products[0] > 0:
             return 0
-        salts = len([a for a in frame.atoms if a.type == om.Atom.SALT])
-        waters = len([a for a in frame.atoms if a.type == om.Atom.WATER])
-        atoms = len(frame.atoms)
-        bonds = len(frame.bonds)
-        return (
-                max(0, 3 - bonds)  # 3 bonds take 1 cycle each
-                + 4 * max(0, 2 - waters)  # making a water takes 4 cycles each
-                + 5 * max(0, 3 - salts)  # making a salt takes 1+4 cycles each
+        e = Evaluator(frame)
+        return (  # 3 bonds take 1 cycle each
+                max(0, 3 - e.bonds())
+                # making a water takes 4 cycles each
+                + 4 * max(0, 2 - e.atom_count_type(om.Atom.WATER))
+                # making a salt takes 1+4 cycles each punish looping bonds
+                + 5 * max(0, 3 - e.atom_count_type(om.Atom.SALT))
                 # punish looping bonds
-                + (math.inf if atoms - bonds <= 1 else 0)
-                + (math.inf if bonds > 3 else 0)  # punish extra bonds
+                + (math.inf if e.atoms() - e.bonds() <= 1
+                   else 0)
+                # punish extra bonds
+                + (math.inf if e.bonds() > 3 else 0)
         )
 
-    def output_heuristic(frame):
+    def output_heuristic(frame: Frame):
         if frame.products[0] > 0:
             return 0
-        salts = len([a for a in frame.atoms if a.type == om.Atom.SALT])
-        waters = len([a for a in frame.atoms if a.type == om.Atom.WATER])
-        atoms = len(frame.atoms)
-        bonds = len(frame.bonds)
-        return (
-                max(0, 3 - bonds)  # 3 bonds take 1 cycle each
-                + 4 * max(0, 5 - atoms)  # making an atom takes 4 cycles each
-                + max(0, 3 - salts)  # making a salt takes 1 cycle each
+        e = Evaluator(frame)
+        return (  # 3 bonds take 1 cycle each
+                max(0, 3 - e.bonds())
+                # making an atom takes 4 cycles each
+                + 4 * max(0, 5 - e.atoms())
+                # making a salt takes 1 cycle each
+                + max(0, 3 - e.atom_count_type(om.Atom.SALT))
                 # punish looping bonds
-                + (math.inf if atoms - bonds <= 1 else 0)
-                + (math.inf if bonds > 3 else 0)  # punish extra bonds
+                + (math.inf if e.atoms() - e.bonds() <= 1 else 0)
+                # punish extra bonds
+                + (math.inf if e.bonds() > 3 else 0)
         )
 
     time_start = timer()
@@ -223,7 +249,8 @@ def main_create_cost_solve_391():
     arm_instrs = {
         arm.arm_number: [
             om.Instruction(i, frame_instrs[arm.arm_number])
-            for i, frame_instrs in enumerate(product_instructions + return_instructions)
+            for i, frame_instrs in
+            enumerate(product_instructions + return_instructions)
             if arm.arm_number in frame_instrs
         ]
         for arm in start_frame.get_arm_parts()
