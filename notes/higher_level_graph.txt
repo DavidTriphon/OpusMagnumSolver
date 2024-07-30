@@ -100,3 +100,82 @@ reverse solve examples:
         solve for water: apply 4 x Input[0]
             { }
         SOLVED
+
+2024-07-29
+
+I spent a lot of time in bed last night thinking about hierarchical search.
+Turns out that's already been invented, but the first application I found
+requires exploring all edges of the upper hierarchy. that doesn't work for me
+since exploration space is infinite.
+
+There's several layers I want to specify, but I think I have the step-by-step
+process in my head. writing it down should help me remember it and highlight
+errors.
+
+I'm using an array of booleans as the guide. In order to create a solution, all
+of these boolean conditions must be flipped to true. These conditions are
+effectively the list of subtask goals to perform before a product can be
+outputted.
+
+for test 391, those tasks are:
+    product = [S-S-S-W]
+    - atom 0 must be obtained
+    - atom 1 must be obtained
+    - atom 2 must be obtained
+    - atom 3 must be obtained
+        (this could either be zero cost by assignment or 1 cost by grabbing)
+    - atom 0 bonded to atom 1
+    - atom 1 bonded to atom 2
+    - atom 2 bonded to atom 3
+        (for each of these, check that when multiple bonds exist, they are at
+        the right angles)
+    - atom 0 calcified
+    - atom 1 calcified
+    - atom 2 calcified
+    - product dropped on output
+
+these tasks can be performed in many possible combination orders.
+There are restrictions/constraints on the subtask order, namely:
+    atoms must be obtained before they are bonded or calcified
+    the product must be dropped on the output last
+
+The highest conceptual state is {produced = [0]} -> {produced = [1]}
+the second-highest conceptual state is these subtasks, tracked as booleans:
+    e.g. {atom0: True, atom1: True, atom2: False ... produced=[0]}
+the third highest is the secondary subtasks to create the transform conditions:
+    e.g. { bond_0_to_1: {move atom0 to bonder, move atom1 to bonder }, ... }
+
+...
+    these tasks keep breaking down until:
+    [... move arm to pos0, grab, move molecule from pos0 to pos1, drop, ...]
+    these tasks have a discrete heuristic for cost in terms of cycles
+    the quest is to find the combinations of these discrete subtasks that has
+    the least cost
+        this is a search function for determining least possible cost
+
+    Determining the least cost from pos0 to pos1 for a molecule
+    requires tracking how molecules move within arm space.
+    For 1 arm, the heuristic is linear, but for 2 or more arms, the size and
+    shape of the molecule determines whether it is possible to change hands.
+    That's for later. 391 has only 1 arm.
+
+    many of the possible combinations of discrete subtasks will have repeats
+    with other combinations or even themselves. the results of such operations
+    should be cached. external factors need to be accounted for when caching
+    results. only heuristics can be cached. not resulting paths, unless
+    maybe they are optimal???
+
+INSIGHT:
+    KEEP BREAKING IT DOWN FURTHER
+    GO TOP DOWN THE HIERARCHY
+    - a heuristic is only used within a specific subtask
+    - the heuristic within a subtask is the cost of the subtask from above
+    - break down the steps from the start of the progression to the end in order
+    - use constraint propagation on eliminating other subtasks further down the
+    line
+    - start with a single node that wants to go from one state to another
+    - see what options are available in order to accomplish that task for the
+    current node
+    - evaluate the options by iterating the connected nodes
+    - keep the order akin to dijkstra. use heuristic when available to convert
+    to a*. The more layers/subtasks that have heuristics, the better.
