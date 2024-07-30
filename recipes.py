@@ -10,11 +10,11 @@ class Recipe:
             part: bytes,
             hovering: list[int] = None
     ):
-        self.ingredients = ingredients
-        self.products = products
-        self.part = part
+        self.ingredients: list[int] = ingredients
+        self.products: list[int] = products
+        self.part: bytes = part
         if hovering is None:
-            hovering = []
+            hovering: list[int] = []
         self.hovering = hovering
 
 
@@ -51,7 +51,7 @@ def recipe_project(metal, metal_up):
     )
 
 
-RECIPES = [
+RECIPES: list[Recipe] = [
     # # elements
     # calcifications
     *[recipe_calcify(element) for element in analysis.ELEMENTAL_ATOM_TYPES],

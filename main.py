@@ -196,7 +196,7 @@ def main_create_cost_solve_391():
     start_frame.iterate({})
 
     def overfitted_heuristic(frame: Frame):
-        if frame.products[0] > 0:
+        if frame.produced[0] > 0:
             return 0
         e = Evaluator(frame)
         return (  # 3 bonds take 1 cycle each
@@ -213,7 +213,7 @@ def main_create_cost_solve_391():
         )
 
     def output_heuristic(frame: Frame):
-        if frame.products[0] > 0:
+        if frame.produced[0] > 0:
             return 0
         e = Evaluator(frame)
         return (  # 3 bonds take 1 cycle each
@@ -231,7 +231,7 @@ def main_create_cost_solve_391():
     time_start = timer()
     # instruction path to product output
     product_instructions, output_frame, output_cost = start_frame.search(
-        satisfy_condition=lambda f: f.products[0] >= 1,
+        satisfy_condition=lambda f: f.produced[0] >= 1,
         heuristic=output_heuristic
     )
     time_midpoint = timer()

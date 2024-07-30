@@ -38,7 +38,7 @@ class Frame:
         self.atoms: list[om.Atom] = atoms or []
         self.bonds: list[om.Bond] = bonds or []
         self.parts: list[om.Part] = parts or []
-        self.products: list[int] = [0 for _ in puzzle.products]
+        self.produced: list[int] = [0 for _ in puzzle.products]
 
     def copy(self):
         return Frame(
@@ -393,7 +393,7 @@ class Frame:
                 grabbed_poses = self.all_grabbed_pos()
                 if not any(atom.position in grabbed_poses
                         for atom in matched.atoms):
-                    self.products[out.which_reagent_or_product] += 1
+                    self.produced[out.which_reagent_or_product] += 1
                     for atom in matched.atoms:
                         self.atoms.remove(atom)
                     for bond in matched.bonds:
@@ -458,11 +458,11 @@ class Frame:
                 all(a == b for a, b in zip(self.atoms, other.atoms)) and
                 all(a == b for a, b in zip(self.bonds, other.bonds)) and
                 all(a == b for a, b in zip(self.parts, other.parts)) and
-                self.products == other.products
+                self.produced == other.produced
         )
 
     def __hash__(self):
         return hash((
             self.puzzle, tuple(self.atoms), tuple(self.bonds),
-            tuple(self.parts), tuple(self.products)
+            tuple(self.parts), tuple(self.produced)
         ))

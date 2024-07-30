@@ -44,7 +44,7 @@ def atom_names(atom_types: list[int]):
     return [ATOM_TYPE_NAMES[atom] for atom in atom_types]
 
 
-def print_puzzle_details(puzzle):
+def print_puzzle_details(puzzle: om.Puzzle):
     print(f"puzzle: \"{puzzle.name.decode('utf-8')}\"")
     extra_parts = puzzleparts.nondef_parts_list(puzzle)
     print(f"- extra parts: ({len(extra_parts)})")
