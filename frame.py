@@ -112,6 +112,18 @@ class Frame:
         return [part for part in self.parts
             if part.name in om.Part.PARTS_CONSUMERS]
 
+    def get_input_parts(self) -> list[om.Part]:
+        return list(sorted([part for part in self.parts
+            if part.name == om.Part.INPUT],
+            key=lambda part: part.which_reagent_or_product
+        ))
+
+    def get_output_parts(self):
+        return list(sorted([part for part in self.parts
+            if part.name in om.Part.PARTS_OUTPUTS],
+            key=lambda part: part.which_reagent_or_product
+        ))
+
     def get_molecules(self) -> list[om.Molecule]:
         linked_atoms = {
             atom.position: {atom}
