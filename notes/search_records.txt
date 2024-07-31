@@ -10,7 +10,10 @@ test 391:
         duration: ~22 seconds (-10 from previous)
     - optimized heuristic, adding an atom reduced heuristc cost by 4 now
         nodes/frames explored: 38k (-16k)
-        duration: ~14 seconds (-8 from previous)
+        duration: ~14.5 seconds (-8 from previous)
     * alternate heuristic found: overfitted, punishes having 3+ waters
         nodes/frames explored: 6k (-32k)
         duration: ~2.5 seconds (-12 from previous)
+    - 99% consistent heuristic
+        nodes/frames explored: 24k (-14k from 2nd previous)
+        duration: ~8.5 seconds (-6 from 2nd previous)

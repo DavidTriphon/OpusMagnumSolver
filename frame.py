@@ -245,12 +245,16 @@ class Frame:
         explored_simplified: set[tuple] = set()
         came_from: dict[Frame, tuple[Frame, dict[int, bytes]]] = dict()
 
+        inconsistencies = []
+
         def instruction_path(frame):
             instrs = []
+            path = []
             while frame in came_from:
                 instrs.insert(0, came_from[frame][1])
+                path.insert(0, frame)
                 frame = came_from[frame][0]
-            return instrs
+            return instrs, path
 
         # fScore: dict[Frame, int] = {self: 0}
         past_count = 0
@@ -263,7 +267,7 @@ class Frame:
                         frontier_queue[-1][1]]))
             past_count = new_count
 
-            current_frame = frontier_queue.pop()[1]
+            current_total, current_frame = frontier_queue.pop()
             if current_frame not in explored:
                 explored.add(current_frame)
                 simp_rep = current_frame.get_simplified_rep()
@@ -271,8 +275,8 @@ class Frame:
                     explored_simplified.add(simp_rep)
                 # exit when the goal is found
                 if satisfy_condition(current_frame):
-                    return (instruction_path(current_frame),
-                    current_frame, frame_cost[current_frame])
+                    return (*instruction_path(current_frame),
+                     frame_cost[current_frame])
                 for neighbor_frame, neighbot_instrs in \
                         current_frame.neighbor_frames():
                     neighbor_cost = frame_cost[current_frame] + 1
@@ -283,6 +287,9 @@ class Frame:
                         if neighbor_frame in explored:
                             explored.remove(neighbor_frame)
                         h_cost = neighbor_cost + h(neighbor_frame)
+                        if h_cost < current_total:
+                            print("found inconsistency in heuristic")
+                            inconsistencies.append((current_frame, neighbor_frame))
                         bisect.insort_left(frontier_queue,
                             (h_cost, neighbor_frame), key=lambda t: -t[0])
 
@@ -372,7 +379,7 @@ class Frame:
                 if not arm.grabbing:
                     grab_positions = arm.arm_grab_positions()
                     arm.grabbing = True
-                    arm.grabbed = [self.get_atom(grab_pos)
+                    arm.grabbed = [self.get_atom(grab_pos) is not None
                         for grab_pos in grab_positions]
                 queue_rotate(arm, 0)
             elif instruction == om.Instruction.DROP:

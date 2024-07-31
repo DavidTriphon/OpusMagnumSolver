@@ -176,6 +176,134 @@ def create_391_solve_partlist():
         calcifier_part]
 
 
+def rotate_diff(x: int, y: int) -> int:
+    return abs((y - x + 3) % 6 - 3)
+
+
+def dist_from_new_atom(frame: Frame, e: Evaluator = None) -> int:
+    e = e or Evaluator(frame)
+    if e.atoms() >= 5:
+        return 0
+
+    # making an atom takes 3 cycles each (4- to offset wip atom)
+    cost = 3 * max(0, 4 - e.atoms())
+
+    arm = frame.get_arm_parts()[0]
+    distance = rotate_diff(0, arm.rotation)
+    # the distance is always a part of the cost for new atoms
+    # but the distance can overlap with other tasks, like calc or bond
+    # reduce addition to the cost by 1 for each of those unfinished
+    # categories.
+    # only care about reduction if the arm is grabbing
+    """
+    if arm.grabbing and arm.grabbed[0]:
+        reduction = (e.atom_count_type(om.Atom.SALT < 3)) + (e.bonds() < 3)
+        cost += max(0, distance - reduction)
+    else:
+        cost += distance
+    """
+
+    cost += (distance > 0)
+
+    # whether the arm is grabbing or not determines whether a drop is
+    # necessary or if a grab is necessary
+    if distance == 0:
+        if arm.grabbing:
+            # ensure it's actually grabbed
+            # grabbing an atom on top of the input means we have it
+            # not grabbed means drop and then grab
+            if not arm.grabbed[0]:
+                cost += 2
+        else:
+            # still need to grab
+            cost += 1
+    else:
+        if arm.grabbing:
+            # grabbing a different atom means drop, move dist, grab
+            cost += 2
+        else:
+            # not grabbing means move dist, grab
+            cost += 1
+
+    return cost
+
+
+def bond_cost(frame: Frame = None, e: Evaluator = None) -> int:
+    e = e or Evaluator(frame)
+    cost = max(0, 3 - e.bonds())
+    return max(cost, 0)
+
+
+def salt_cost(frame: Frame = None, e: Evaluator = None) -> int:
+    e = e or Evaluator(frame)
+    cost = max(0, 3 - e.atom_count_type(om.Atom.SALT))
+    return cost
+
+
+def output_dist(frame: Frame, e: Evaluator = None) -> int:
+    e = e or Evaluator(frame)
+    if (e.atoms() == 5 and e.atom_count_type(om.Atom.SALT) == 3 and
+            e.bonds() == 3):
+        arm = frame.get_arm_parts()[0]
+        cost = 1  # for the final drop
+        if arm.rotation != 3:
+            cost += 1
+        return cost
+    else:
+        return 2
+
+
+def bond_punish_cost(frame: Frame = None, e: Evaluator = None) -> int:
+    e = e or Evaluator(frame)
+    return (  # punish looping bonds
+            (math.inf if e.atoms() - e.bonds() < 1 else 0)
+            # punish extra bonds
+            + (math.inf if e.bonds() > 3 else 0)
+    )
+
+
+def overfitted_heuristic(frame: Frame) -> int:
+    if frame.produced[0] > 0:
+        return 0
+    e = Evaluator(frame)
+    return (  # 3 bonds take 1 cycle each
+            max(0, 3 - e.bonds())
+            # making a water takes 4 cycles each
+            + 4 * max(0, 2 - e.atom_count_type(om.Atom.WATER))
+            # making a salt takes 1+4 cycles each punish looping bonds
+            + 5 * max(0, 3 - e.atom_count_type(om.Atom.SALT))
+            # punish looping bonds
+            + bond_punish_cost(e=e)
+    )
+
+
+def output_heuristic(frame: Frame) -> int:
+    if frame.produced[0] > 0:
+        return 0
+    e = Evaluator(frame)
+    return (  # 3 bonds take 1 cycle each
+            max(0, 3 - e.bonds())
+            # making an atom takes 4 cycles each
+            + 4 * max(0, 5 - e.atoms())
+            # making a salt takes 1 cycle each
+            + max(0, 3 - e.atom_count_type(om.Atom.SALT))
+            # punish looping bonds
+            + bond_punish_cost(e=e)
+    )
+
+
+def consistent_heuristic(frame: Frame) -> int:
+    if frame.produced[0] > 0:
+        return 0
+    e = Evaluator(frame)
+    return (
+            max(salt_cost(e=e), bond_cost(frame, e))
+            + dist_from_new_atom(frame, e)
+            + bond_punish_cost(e=e)
+            + output_dist(frame, e)
+    )
+
+
 def main_create_cost_solve_391():
     # select puzzle
     puzzles = puzzledb.get_test_puzzles()
@@ -195,48 +323,15 @@ def main_create_cost_solve_391():
     start_frame = Frame(puzzle=puzzle, parts=create_391_solve_partlist())
     start_frame.iterate({})
 
-    def overfitted_heuristic(frame: Frame):
-        if frame.produced[0] > 0:
-            return 0
-        e = Evaluator(frame)
-        return (  # 3 bonds take 1 cycle each
-                max(0, 3 - e.bonds())
-                # making a water takes 4 cycles each
-                + 4 * max(0, 2 - e.atom_count_type(om.Atom.WATER))
-                # making a salt takes 1+4 cycles each punish looping bonds
-                + 5 * max(0, 3 - e.atom_count_type(om.Atom.SALT))
-                # punish looping bonds
-                + (math.inf if e.atoms() - e.bonds() <= 1
-                   else 0)
-                # punish extra bonds
-                + (math.inf if e.bonds() > 3 else 0)
-        )
-
-    def output_heuristic(frame: Frame):
-        if frame.produced[0] > 0:
-            return 0
-        e = Evaluator(frame)
-        return (  # 3 bonds take 1 cycle each
-                max(0, 3 - e.bonds())
-                # making an atom takes 4 cycles each
-                + 4 * max(0, 5 - e.atoms())
-                # making a salt takes 1 cycle each
-                + max(0, 3 - e.atom_count_type(om.Atom.SALT))
-                # punish looping bonds
-                + (math.inf if e.atoms() - e.bonds() <= 1 else 0)
-                # punish extra bonds
-                + (math.inf if e.bonds() > 3 else 0)
-        )
-
     time_start = timer()
     # instruction path to product output
-    product_instructions, output_frame, output_cost = start_frame.search(
+    output_instructions, output_frames, output_cost = start_frame.search(
         satisfy_condition=lambda f: f.produced[0] >= 1,
-        heuristic=output_heuristic
+        heuristic=consistent_heuristic
     )
     time_midpoint = timer()
     # instruction path to reset
-    return_instructions, end_frame, return_cost = output_frame.search(
+    return_instructions, return_frames, return_cost = output_frames[-1].search(
         satisfy_condition=lambda f: f.parts == start_frame.parts
     )
     time_end = timer()
@@ -244,13 +339,20 @@ def main_create_cost_solve_391():
     print("output search duration=%.2f seconds" % (time_midpoint - time_start))
     print("return search duration=%.2f seconds" % (time_end - time_midpoint))
     print("cost = %d" % (output_cost + return_cost))
+    print()
+    print("heuristics:")
+    for heuristic in [overfitted_heuristic, output_heuristic,
+        consistent_heuristic]:
+        print("  - %s:" % heuristic.__name__)
+        print("    %r" % [heuristic(frame) + i
+            for i, frame in enumerate([start_frame] + output_frames)])
 
     # reformat instructions from search into solution format
     arm_instrs = {
         arm.arm_number: [
             om.Instruction(i, frame_instrs[arm.arm_number])
             for i, frame_instrs in
-            enumerate(product_instructions + return_instructions)
+            enumerate(output_instructions + return_instructions)
             if arm.arm_number in frame_instrs
         ]
         for arm in start_frame.get_arm_parts()

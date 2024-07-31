@@ -1077,7 +1077,7 @@ class Part:
         self.track_hexes = track_hexes or []
         self.arm_number = arm_number
         self.grabbing = grabbing
-        self.grabbed = grabbed
+        self.grabbed: list[bool] = grabbed
         self.conduit_id = conduit_id
         self.conduit_hexes = conduit_hexes or []
         if decoder is None:
