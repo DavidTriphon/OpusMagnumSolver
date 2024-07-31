@@ -179,3 +179,85 @@ INSIGHT:
     - evaluate the options by iterating the connected nodes
     - keep the order akin to dijkstra. use heuristic when available to convert
     to a*. The more layers/subtasks that have heuristics, the better.
+
+2024-07-30:
+
+    I'm having confusions over the design of shifting from the path search to
+    the constraint greedy search for any.
+    I'm also having concerns about the number of nodes explored by the
+    hierarchical search between choosing the order of actions and implementing
+    those actions.
+
+    ~~I think the fastest way to find a cheap path, knowing that there are
+    subactions that must all be performed, is to first construct a complete
+    layer of actions using the heuristic for movements as cost, and then
+    iterating over the sub-nodes for the tasks, while keeping the entire
+    frontier at an appropriate cost, so other more costly unfinished heuristic
+    paths could be evaluated alongside lower cost heuristic paths as they
+    accumulate real costs from implementing the lower nodes.~~
+
+    I think the idea behind implementing recursive definitions of tasks is more
+    a part of the constraints that determine the list of tasks. What I'm solving
+    for now is the same as if I gave it initial constraints regarding part
+    positions and part counts.
+
+    wait never mind about heuristic layer and then implementation layer. That
+    means redoing work on multiple branches when solving for implementation of
+    an edge that has already been selected by multiple children paths.
+
+    Also, I'm realizing that my recursive order of subtasks isn't great for
+    situations such as:
+    - move atom0 to bonder to prep for bonding (uncovers atom1)
+    - move atom1 to calcifier to turn it to salt
+    - move atom1 to bonder to create bond
+
+    previous models would not have allowed this order except by coincidence.
+
+Constraints:
+    - an atom used in an output must be produced by an input or producer part
+    - a bond used in an output must be produced by a bonder or a reagent
+    - an atom used in a consumer part must be produced by an input or producer
+    ergo:
+        - an atom has a path between its origin and destination that passes over
+          a list of required locations a certain number of times in every
+          configuration and order
+
+just wrote a lot in the journal again. playing around with the old cycles tabled
+understanding of parallel operations, but instead applying it to ordered single
+operations. I got the heuristic up to 26, but it requires knowledge of distance
+between available positions, and understanding the cheapest way to rotate a
+bonded atom to get it on the right spot, which requires translating one
+coordinate space to another.
+
+Improving the heuristic:
+    currently the heuristic only counts the cost of material and transforms, but
+    not grabs and drops. 4 atoms to grab from input means a necessary 4 drops
+    and min of 4 moves to reposition.
+
+I'm noticing a pattern that switches my attention when I consider different
+process and comparisons and algorithms. I frequently shift based on reducing
+repeated work or based on trying to be more greedy and reducing nodes
+considered.
+
+For example, earlier when I debated whether the heuristic graph layer should
+be path searched before the implementation layer was path searched, I was
+considering the greedy approach, and interested in reducing searching the
+implementation layer on a path I wouldn't need.
+When I wavered and went back to stay on the implementation layer, and work from
+the start, that was out of a fear of creating duplicate work.
+
+I need to figure out what I'm looking for, what's acceptable, and what the
+strengths and weaknesses are of pre-existing algorithms and why those work the
+way that they do, so I can keep the important properties and discard the rest.
+
+For A* to guarantee the result is optimal solution, the heuristic must be
+admissible. The most straight forward way to guarantee admissibility is to
+guarantee consistency. That means the heuristic cost for a node is never less
+than the heuristic cost of its parent minus the edge cost. Alternatively, the
+heuristic cost for a node can never be more than the minimum cost of all paths
+that lead from that node to the goal.
+
+My current heuristic is not consistent, but for 391, it is optimal.
+I am going to experiment with the heuristic to see if I can make it more
+consistent.
+
