@@ -326,13 +326,13 @@ def main_create_cost_solve_391():
     time_start = timer()
     # instruction path to product output
     output_instructions, output_frames, output_cost = start_frame.search(
-        satisfy_condition=lambda f: f.produced[0] >= 1,
+        goal_condition=lambda f: f.produced[0] >= 1,
         heuristic=consistent_heuristic
     )
     time_midpoint = timer()
     # instruction path to reset
     return_instructions, return_frames, return_cost = output_frames[-1].search(
-        satisfy_condition=lambda f: f.parts == start_frame.parts
+        goal_condition=lambda f: f.parts == start_frame.parts
     )
     time_end = timer()
 

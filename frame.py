@@ -230,12 +230,12 @@ class Frame:
 
     # complicated and important methods
 
-    def search(self, match_frame=None, satisfy_condition=None, heuristic=None):
+    def search(self, match_frame=None, goal_condition=None, heuristic=None):
         if match_frame is not None:
-            def satisfy_condition(frame):
+            def goal_condition(frame):
                 return frame == match_frame
-        if satisfy_condition is None:
-            raise ValueError("match_frame or satisfy_condition must be set")
+        if goal_condition is None:
+            raise ValueError("match_frame or goal_condition must be set")
 
         h = heuristic or (lambda x: 0)
 
@@ -274,7 +274,7 @@ class Frame:
                 if simp_rep not in explored_simplified:
                     explored_simplified.add(simp_rep)
                 # exit when the goal is found
-                if satisfy_condition(current_frame):
+                if goal_condition(current_frame):
                     return (*instruction_path(current_frame),
                      frame_cost[current_frame])
                 for neighbor_frame, neighbot_instrs in \
