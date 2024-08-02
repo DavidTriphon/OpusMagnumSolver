@@ -4,18 +4,98 @@ import numpy as np
 
 from sharedtypes import *
 
-rot_cw = np.array([[0, 1], [-1, 1]])
-
-
-def _rotate_matrix(count):
-    if count == 0:
-        return np.identity(2).astype(int)
-    else:
-        return np.matmul(rot_cw, _rotate_matrix(count - 1))
-
-
-_rotation_matrices = [_rotate_matrix(i) for i in range(6)]
 ROTATION_VECTORS = [(1, 0), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, -1)]
+
+
+def pos_from_direction(magnitude: int, direction: int | float,
+        offset: int = None) -> Pos:
+    if magnitude == 0:
+        return 0, 0
+    if magnitude < 0:
+        raise ValueError("magnitude must be non-negative")
+    if offset is None:
+        offset = (direction % 1) * magnitude
+    # forgive a certain amount of error
+    if abs(round(offset) - offset) > 1e-14 * magnitude:
+        raise ValueError(
+            "the decimal component of rotation must be a valid integer"
+            "fraction where the denominator is equal to magnitude")
+    offset = round(offset)
+    opposite = direction >= 3
+    direction = int(direction) % 3
+    if direction == 0:
+        x, y = magnitude - offset, offset
+    elif direction == 1:
+        x, y = -offset, magnitude
+    else:  # rotation == 2
+        x, y = -magnitude, magnitude - offset
+
+    if opposite:
+        x, y = -x, -y
+
+    return x, y
+
+
+def direction_int(vec: Pos) -> int | None:
+    # center
+    if vec == (0, 0):
+        return None
+
+    # horizontal
+    if vec[1] == 0:
+        if vec[0] > 0:
+            return 0
+        else:
+            return 3
+    # vertical
+    elif vec[0] == 0:
+        if vec[1] > 0:
+            return 1
+        else:
+            return 4
+    # sum 0 diagonal
+    elif vec[0] == -vec[1]:
+        if vec[1] > 0:
+            return 2
+        else:
+            return 5
+    # fractional values
+    return None
+
+
+def direction_float(vec: Pos) -> float | None:
+    # center
+    if vec == (0, 0):
+        return None
+
+    x, y = vec
+
+    vec_prod = x * y
+    vec_sum = x + y
+    vec_diff = x - y
+
+    # no fraction on the dimension lines
+    if vec_prod == 0 or vec_sum == 0:
+        return direction_int(vec)
+
+    # rotation 0 and 3, upper right and lower left
+    if vec_prod > 0:
+        base = 0 if y > 0 else 3
+        return base + (y / vec_sum)
+
+    # top and bottom diagonal quadrants
+    if (vec_sum < 0) != (vec_diff < 0):  # vec_sum * vec_diff < 0
+        base = 1 if y > 0 else 4
+        return base + (vec_sum / y)
+
+    # left and right diagonal quadrants
+    else:  # vec_sum * vec_diff > 0
+        base = 2 if y > 0 else 5
+        return base + (vec_sum / x)
+
+
+def angle_directions(rot1: float | int, rot2: float | int) -> float | int:
+    return abs((rot1 - rot2 + 3) % 6 - 3)
 
 
 def translate(position: Pos2D, translate_pos: Pos2D,

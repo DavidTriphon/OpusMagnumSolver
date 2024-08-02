@@ -17,3 +17,6 @@ test 391:
     - 99% consistent heuristic
         nodes/frames explored: 24k (-14k from 2nd previous)
         duration: ~8.5 seconds (-6 from 2nd previous)
+    - added punishment based on known bond angles in product
+        nodes/frames explored: 16k (-8k from previous)
+        duration: ~6.5 seconds (-2 from previous)

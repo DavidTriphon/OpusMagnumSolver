@@ -6,6 +6,7 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 import analysis
+import hexmath
 from frame import Frame
 import puzzledb
 import recipes
@@ -262,6 +263,34 @@ def bond_punish_cost(frame: Frame = None, e: Evaluator = None) -> int:
     )
 
 
+def punish_bad_angles(frame: Frame, e: Evaluator = None) -> int | float:
+    # no possibility of punishment if less than 2 bonds
+    if e.bonds() < 2:
+        return 0
+
+    pos_nbs = dict()
+    for bond in frame.bonds:
+        pos1, pos2 = bond.positions
+        pos_nbs[pos1] = pos_nbs.get(pos1, set()) | {pos2}
+        pos_nbs[pos2] = pos_nbs.get(pos2, set()) | {pos1}
+
+    for pos, nbs in pos_nbs.items():
+        # ensure no atom has more than 2 bonds
+        if len(nbs) > 2:
+            return math.inf
+        # ensure all bonds that share a pos are at angles of 2
+        if len(nbs) == 2:
+            pos1, pos2 = nbs
+            pos1 = hexmath.difference(pos1, pos)
+            pos2 = hexmath.difference(pos2, pos)
+            dir1 = hexmath.direction_int(pos1)
+            dir2 = hexmath.direction_int(pos2)
+            if not hexmath.angle_directions(dir1, dir2) == 2:
+                return math.inf
+
+    return 0
+
+
 def overfitted_heuristic(frame: Frame) -> int:
     if frame.produced[0] > 0:
         return 0
@@ -301,6 +330,7 @@ def consistent_heuristic(frame: Frame) -> int:
             + dist_from_new_atom(frame, e)
             + bond_punish_cost(e=e)
             + output_dist(frame, e)
+            + punish_bad_angles(frame, e)
     )
 
 
