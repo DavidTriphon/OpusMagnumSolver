@@ -1,0 +1,155 @@
+> Determining the minimum possible cost of parts for a puzzle:
+
+1. What is the minimum required parts to transform the ingredients into the
+products?
+
+    assume you only need 1 of each kind of part for the sake of cost.
+
+    purification uses only metal, projection uses quicksilver
+    purification requires 3 hand slots, projection only requires 1 (QS).
+
+2. Does it need bonders? does it need debonders?
+
+    Are there more atoms in the product than in the reagent?
+        If yes, bonders are necessary.
+    Are there less atoms in the product than in the reagent?
+        If yes, debonders are necessary.
+    If there is a reagent that matches the shape for each product:
+        then it _might_ not be necessary to use any bonders/debonders.
+
+    Does the shape of the product match the reagent?
+        Can the reagent atom types be changed in place without debonding to
+        match the product?
+
+        projections can change a reagent to match the product, but they consume
+        quicksilver atoms _as molecules_. Which means some part of the puzzle
+        needs to produce quicksilver molecules if projection is necessary.
+
+3. What is the minimum cost in arms and track to cover all hands-on spaces?
+
+    Each arm adds 6 hand slots. the number of channels it has is always 1.
+
+    Track costs 5N for N positions. 1 position costs 0 (no track).
+
+    only arms of length 1 or arms on track can create bonds between single atom
+    molecules. a bonder only requires as many hand spaces as there are molecules
+    to be bonded that only have 1 atom. More simply, the arm does not have to
+    be able to be hands on the bonder unless one of the bond ingredients is a
+    single atom. If both ingredients are a single atom, then both spots of the
+    bonder must be covered by the arm.
+
+EXAMPLES:
+
+test 391:
+    W => S-S-S-W
+
+    - bonder requirements:
+        product bond count > all reagent bond counts
+        ergo: bonder required
+
+    - recipe requirements:
+        W in products. W in reagents. W is supplied.
+        S in products. S not in reagents. S must be produced.
+            S produced via calcification. (which is the only option.)
+            calcification consumes E, W, F, A:
+                one must be consumed.
+                W is in reagents. S is satisfied by calcification.
+
+    - arm and track requirements:
+        how many required hand slots?
+            reagent requires 1 hand slot
+            product requires 1 hand slot
+            bonder is present
+                all reagents are 1 atom
+                assume single atom reagents are getting bonded
+                both slots on bonder require hand slots
+            calcification changes state of atom in place
+                atoms do not have to be dropped or grabbed as single atoms
+                calcification does not require hand slot
+                calcification does have to be reachable by atoms in mid-product
+                product has bonds
+                use arm deductions later to choose reachable space for calcifier
+
+            total 4 hand slots, including 1 bonder with adjacent slots
+            1 arm w/ length=1, no tracks
+
+    - total parts:
+        reagent W (cost 0)
+        product S-S-S-W (cost 0)
+        bonder (cost 10)
+        calcifier (cost 10)
+        1 arm (cost 20)
+
+        total cost: 40
+
+    - What positions work for the required parts?
+        1 reagent, 1 product, 2 bonder spaces, all in a circle around the arm
+        consider flow from reagent to product
+        transformers should stay in between.
+
+test 054:
+    V + E + E + V => V-S-V-V
+    4 reagents, each 2 duplicates:
+        simplified:
+        V + E => V-S-V-V
+
+    - bonders:
+        product bond count > all reagent bond counts
+        ergo: bonder required
+
+    - recipes:
+        V in products. V in reagents. V is supplied.
+        S in products. S not in reagents. S must be produced.
+            S produced via calcification. (which is the only option.)
+            calcification consumes E, W, F, A:
+                one must be consumed.
+                E is in reagents. S is satisfied by calcification.
+
+    - arms and tracks:
+        how many required hand slots?
+            reagent E requires = 1 hand slot
+            reagent V requires = 1 hand slot
+            product V-S-V-V requires = 1 hand slot
+            bonder is present
+                all required reagents are 1 atom
+                assume single atom reagents are getting bonded
+                both slots on bonder require hand slots = 2 hand slots
+            calcification changes state of atom in place
+                atoms do not have to be dropped or grabbed as single atoms
+                calcification does not require hand slot
+                calcification does have to be reachable by atoms in mid-product
+                product has bonds
+                use arm deductions later to choose reachable space for calcifier
+
+            total 5 hand slots, including 1 bonder with adjacent slots
+            1 arm w/ length=1, no tracks
+
+    - total parts:
+        reagent V (cost 0)
+        reagent E (cost 0)
+        product V-S-V-V (cost 0)
+        bonder (cost 10)
+        calcifier (cost 10)
+        1 arm (cost 20)
+
+    - positions
+        Reagents are single atoms so reagent blocking is not possible
+        Therefore reagents should be treated as walls
+        Hand slots available by the arm form a linear circle.
+        Therefore, recipe parts AND the product parts should be placed on the
+          same "side" between the reagents.
+        bonder and product part requires at least 3 hand slot spaces.
+        ergo reagents must be placed 1 or 2 spaces apart without anything
+          between them.
+        calcifier can be in the hand slots without concern since all E's are
+          converted into S's, and other atoms are immune to calcification
+        calcifier can be within 1-2 spaces away from the hand slots since the
+          max dist between S atoms in the product and other atoms is 2.
+
+HYPOTHETICALs:
+    3 reagents, 1 product, and 1 arm is not possible without track.
+    3 reagents, 2 product, and 1 arm is possible in select cases.
+        not when all 3 reagents are used in one product.
+
+    products must exist in between the used reagents, or else the reagents must
+      use input overlap blocking
