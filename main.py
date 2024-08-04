@@ -5,12 +5,9 @@ import traceback
 from pathlib import Path
 from timeit import default_timer as timer
 
-import analysis
 import hexmath
 from frame import Frame
 import puzzledb
-import recipes
-import puzzleparts
 import display
 import om
 
@@ -53,36 +50,6 @@ def validate_workshop_puzzle(puzzle_id, solution_digit):
         raise FileNotFoundError(f"{solution_path} does not exist")
     solution = om.Solution(str(solution_path))
     om.Sim(puzzle, solution)
-
-
-def possible_product_types(puzzle: om.Puzzle) -> list[int]:
-    reagent_types = puzzle.reagent_types()
-    product_types = reagent_types.copy()
-    hovering_types = []
-    type_checklist = product_types.copy()
-
-    available_parts = puzzleparts.full_parts_list(puzzle)
-    available_recipes = [r for r in recipes.RECIPES
-        if r.part in available_parts]
-
-    if om.Part.BERLO in available_parts:
-        hovering_types = analysis.SIMPLE_ELEMENTAL_ATOM_TYPES
-
-    while type_checklist:
-        next_type = type_checklist.pop()
-        for recipe in available_recipes:
-            if next_type in recipe.ingredients:
-                if all([ing in product_types for ing in recipe.ingredients]):
-                    if all([
-                        hov in hovering_types or hov in product_types
-                        for hov in recipe.hovering
-                    ]):
-                        for product in recipe.products:
-                            if product not in product_types:
-                                product_types.append(product)
-                                type_checklist.append(product)
-
-    return product_types
 
 
 def calc_io_ratio(puzzle: om.Puzzle) -> tuple[int, int]:

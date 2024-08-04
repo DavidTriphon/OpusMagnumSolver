@@ -1,5 +1,4 @@
 import om
-import puzzleparts
 
 ATOM_TYPE_NAMES = {
     om.Atom.SALT: "SALT",
@@ -46,7 +45,7 @@ def atom_names(atom_types: list[int]):
 
 def print_puzzle_details(puzzle: om.Puzzle):
     print(f"puzzle: \"{puzzle.name.decode('utf-8')}\"")
-    extra_parts = puzzleparts.nondef_parts_list(puzzle)
+    extra_parts = puzzle.nondef_parts_list()
     print(f"- extra parts: ({len(extra_parts)})")
     for i, part in enumerate(extra_parts):
         print(f"    [{i}]: {part.decode('utf-8')}")

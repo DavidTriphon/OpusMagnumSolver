@@ -27,7 +27,7 @@ notable tests for monitoring
     no duplication
     12:1 ratio
 
-- test 391
+- test 391:
     water => salt-salt-salt-water
     very simple base case for a cost-focused solver
 
@@ -42,3 +42,86 @@ notable tests for monitoring
     all calcification
     no duplication
     1:6 ratio
+
+TESTS THAT DEFINE BONDING REQUIREMENT BORDERS:
+        All tests satisfy the prerequisite that a reagent with the same
+        number of atoms exists for every product
+
+- test 010:
+    Earth-Copper + QuickSilver => Earth-Silver
+    has extra reagent, but one reagent is convertible to the product
+
+- test 023:
+    QE-QE + QE => Earth-Water
+    requires bonder, but not debonder if QE-QE is unused
+
+- test 046:
+    fire-air => salt-salt
+    all atoms are convertible to the product
+
+- test 125:
+    air + water-earth => Vitae-earth
+    equal bonding, but not convertible
+    requires debonder and bonder
+
+- test 284:
+    Fire-Earth + Earth + Earth => Vitae-Mors
+    requires bonder, animismus, calcifier
+
+- test 393:
+    fire-fire => fire-vitae
+    equal bonds, but requires bonder and debonder,
+      because fire is not convertible to vitae.
+    (also requires animismus and calcifier)
+
+- test 458:
+    Salt-Vitae => Earth-Vitae + Earth-Fire
+    first product does not require debonding or bonding
+    second product does require bonding/debonding
+
+- test 510:
+    Earth-Water + Earth => Vitae-Mors + Vitae-Vitae
+    requires calcification, animismus, bonding
+
+- test 534:
+    Salt + Salt-Salt => Fire-Earth
+    does not require bonding if first reagent is unused
+    only requires duplicator and berlo wheel
+
+- test 632:
+    QuickSilver + Vitae-Lead + QuickSilver => Vitae-Gold
+    Does not require bonding
+    requires projection
+
+- test 645:
+    Salt + Salt + Salt-Salt => Vitae-Mors
+    requires bonding, but not debonding
+    requires animismus
+
+- test 702:
+    Copper-QuickSilver + Fire => Mors-Silver
+    require debonder and bonder
+    debonder to detach the quicksilver to convert copper to silver
+    bonder to attach mors to silver
+
+- test 799:
+    salt + vitae-QE => QE-vitae
+    product matches reagent
+    no production necessary
+
+- test 803:
+    Fire-Vitae => Vitae-Earth + Vitae-Earth
+    no bonding required
+    calcifier and duplicator and berlo required
+    convert fire to salt to earth
+
+- test 832:
+    Air + Salt-Silver + Fire => Salt-Fire + Salt-Silver
+    Salt-Silver is already satisfied by reagent
+    Salt-Fire requires either a calcifier or a debonder
+        fire is provided by reagent
+        salt is produced by calcifying fire or air,
+          or by detaching it from silver
+          both options are equal cost
+          calcifying is preferable since it does not produce waste in the ratio
+        salt-fire inherently requires bonding

@@ -390,6 +390,7 @@ import pathlib
 
 import numpy as np
 import hexmath
+import om
 
 from sharedtypes import *
 
@@ -443,147 +444,6 @@ class Encoder:
                 self.write_struct_format('<B', 0x80 | (n & 0x7f))
                 n >>= 7
         self.bytes.extend(string)
-
-
-class Puzzle:
-    # constants for parts_available:
-    ARM = 1 << 0
-    MULTIARM = 1 << 1
-    PISTON = 1 << 2
-    TRACK = 1 << 3
-    BONDER = 1 << 8
-    UNBONDER = 1 << 9
-    MULTIBONDER = 1 << 10
-    TRIPLEX = 1 << 11
-    CALCIFICATION = 1 << 12
-    DUPLICATION = 1 << 13
-    PROJECTION = 1 << 14
-    PURIFICATION = 1 << 15
-    ANIMISMUS = 1 << 16
-    DISPOSAL = 1 << 17
-    QUINTESSENCE = 1 << 18
-    GRAB_AND_ROTATE = 1 << 22
-    DROP = 1 << 23
-    RESET = 1 << 24
-    REPEAT = 1 << 25
-    PIVOT = 1 << 26
-    BERLO = 1 << 28
-    DEFAULT_PARTS_AVAILABLE = 0x07C0170F
-
-    def __init__(
-            self, file=None, *, decoder=None, name=b'', creator=0,
-            parts_available=DEFAULT_PARTS_AVAILABLE, reagents=None,
-            products=None, output_scale=1, production_info=None
-    ):
-        self._hash = None
-        self.name = name
-        self.creator = creator
-        self.parts_available = parts_available
-        self.reagents = reagents or []
-        self.products = products or []
-        self.output_scale = output_scale
-        self.production_info = production_info
-        if isinstance(file, str):
-            with open(file, 'rb') as f:
-                decoder = Decoder(f.read())
-        elif isinstance(file, bytes):
-            decoder = Decoder(file)
-        elif isinstance(file, Puzzle):
-            decoder = Decoder(file.to_bytes())
-        elif file is not None:
-            raise ValueError(
-                'Puzzle() may only take a filename, bytes, or another Puzzle as a positional parameter'
-            )
-        if decoder is None:
-            return
-        if decoder.read_struct_format('<I') != (3,):
-            raise ValueError('unknown version number in puzzle file')
-        self.name = decoder.read_string()
-        self.creator, self.parts_available, nreagents = decoder.read_struct_format(
-            '<QQI'
-        )
-        for i in range(nreagents):
-            self.reagents.append(Molecule(decoder=decoder))
-        nproducts, = decoder.read_struct_format('<I')
-        for i in range(nproducts):
-            self.products.append(Molecule(decoder=decoder))
-        self.output_scale, = decoder.read_struct_format('<I')
-        if decoder.read_struct_format('<B') != (0,):
-            self.production_info = ProductionInfo(decoder=decoder)
-
-    def encode(self, encoder):
-        encoder.write_struct_format('<I', 3)
-        encoder.write_string(self.name)
-        encoder.write_struct_format(
-            '<QQI', self.creator, self.parts_available,
-            len(self.reagents)
-        )
-        for m in self.reagents:
-            m.encode(encoder)
-        encoder.write_struct_format('<I', len(self.products))
-        for m in self.products:
-            m.encode(encoder)
-        encoder.write_struct_format('<I', self.output_scale)
-        if self.production_info is not None:
-            encoder.write_struct_format('<B', 1)
-            self.production_info.encode(encoder)
-        else:
-            encoder.write_struct_format('<B', 0)
-
-    def to_bytes(self):
-        encoder = Encoder()
-        self.encode(encoder)
-        return encoder.bytes
-
-    def write_to_path(self, filename):
-        with open(filename, 'wb') as f:
-            f.write(self.to_bytes())
-
-    def are_parts_available(self, parts):
-        return self.parts_available & parts == parts
-
-    def are_parts_banned(self, parts):
-        return ~self.parts_available & parts == parts
-
-    def molecules(self):
-        return self.reagents + self.products
-
-    def atom_types(self):
-        return sorted(list({
-            atom.type
-            for mole in self.molecules()
-            for atom in mole.atoms
-        }))
-
-    def reagent_types(self):
-        return sorted(list({
-            atom.type
-            for mole in self.reagents
-            for atom in mole.atoms
-        }))
-
-    def product_types(self):
-        return sorted(list({
-            atom.type
-            for mole in self.products
-            for atom in mole.atoms
-        }))
-
-    def bond_types(self):
-        return sorted(list({
-            bond.type
-            for mole in self.molecules()
-            for bond in mole.bonds
-        }))
-
-    def __hash__(self):
-        if self._hash is None:
-            self._hash = hash((
-                self.name, self.creator, self.parts_available,
-                tuple(self.reagents),
-                tuple(self.products), self.output_scale
-            ))
-        return self._hash
 
 
 class Molecule:
@@ -739,6 +599,10 @@ class Atom:
     TYPES_ELEMENTAL = {AIR, EARTH, FIRE, WATER}
     TYPES_METAL = {LEAD, TIN, IRON, COPPER, SILVER, GOLD}
 
+    TYPES_CATEGORY_ELEMENTAL = TYPES_ELEMENTAL | {VITAE, MORS, SALT,
+        QUINTESSENCE}
+    TYPES_CATEGORY_METAL = TYPES_METAL | {QUICKSILVER}
+
     def __init__(self, type, position: Pos2D):
         self.type: int = type
         self.position: Pos2D = tuple(position)
@@ -846,7 +710,7 @@ class Bond:
     def __str__(self):
 
         return "Bond(%s, %s-%s)" % (Bond.type_name(self.type),
-            self.positions[0], self.positions[1])
+        self.positions[0], self.positions[1])
 
 
 class ProductionInfo:
@@ -1052,6 +916,33 @@ class Part:
     PARTS_CONSUMERS = {PROJECTION, PURIFICATION, UNIFICATION, DISPERSION,
         ANIMISMUS, DISPOSAL, OUTPUT_STANDARD, CONDUIT}
     PARTS_OUTPUTS = {OUTPUT_STANDARD, OUTPUT_REPEATING}
+
+    COSTS = {
+        ARM1: 20,
+        ARM2: 30,
+        ARM3: 30,
+        ARM6: 30,
+        PISTON: 40,
+        TRACK: 5,
+        BERLO: 30,
+        BONDER: 10,
+        UNBONDER: 10,
+        TRIPLEX: 20,
+        MULTIBONDER: 30,
+        CALCIFICATION: 10,
+        DISPERSION: 20,
+        DISPOSAL: 0,
+        DUPLICATION: 20,
+        ANIMISMUS: 20,
+        EQUILIBRIUM: 0,
+        PROJECTION: 20,
+        PURIFICATION: 20,
+        UNIFICATION: 20,
+        INPUT: 0,
+        OUTPUT_STANDARD: 0,
+        OUTPUT_REPEATING: 0,
+        CONDUIT: 0,
+    }
 
     # tick part evaluation order:
     # 1. grabs/drops
@@ -1277,6 +1168,225 @@ class Instruction:
     def __str__(self):
         return "Instruction(%s, %s)" % (self.index,
         Instruction.OP_NAMES[self.instruction])
+
+
+class Puzzle:
+    # constants for parts_available:
+    ARM = 1 << 0
+    MULTIARM = 1 << 1
+    PISTON = 1 << 2
+    TRACK = 1 << 3
+    BONDER = 1 << 8
+    UNBONDER = 1 << 9
+    MULTIBONDER = 1 << 10
+    TRIPLEX = 1 << 11
+    CALCIFICATION = 1 << 12
+    DUPLICATION = 1 << 13
+    PROJECTION = 1 << 14
+    PURIFICATION = 1 << 15
+    ANIMISMUS = 1 << 16
+    DISPOSAL = 1 << 17
+    QUINTESSENCE = 1 << 18
+    GRAB_AND_ROTATE = 1 << 22
+    DROP = 1 << 23
+    RESET = 1 << 24
+    REPEAT = 1 << 25
+    PIVOT = 1 << 26
+    BERLO = 1 << 28
+    DEFAULT_PARTS_AVAILABLE = 0x07C0170F
+
+    FLAG_NAMES = {
+        0: "ARM",
+        1: "MULTIARM",
+        2: "PISTON",
+        3: "TRACK",
+        8: "BONDER",
+        9: "UNBONDER",
+        10: "MULTIBONDER",
+        11: "TRIPLEX",
+        12: "CALCIFICATION",
+        13: "DUPLICATION",
+        14: "PROJECTION",
+        15: "PURIFICATION",
+        16: "ANIMISMUS",
+        17: "DISPOSAL",
+        18: "QUINTESSENCE",
+        22: "GRAB_AND_ROTATE",
+        23: "DROP",
+        24: "RESET",
+        25: "REPEAT",
+        26: "PIVOT",
+        28: "BERLO",
+    }
+
+    FLAG_PARTS = {
+        0: [Part.ARM1],
+        1: [Part.ARM2, Part.ARM3, Part.ARM6],
+        2: [Part.PISTON],
+        3: [Part.TRACK],
+        8: [Part.BONDER],
+        9: [Part.UNBONDER],
+        10: [Part.MULTIBONDER],
+        11: [Part.TRIPLEX],
+        12: [Part.CALCIFICATION],
+        13: [Part.DUPLICATION],
+        14: [Part.PROJECTION],
+        15: [Part.PURIFICATION],
+        16: [Part.ANIMISMUS],
+        17: [Part.DISPOSAL],
+        18: [Part.UNIFICATION, Part.DISPERSION],
+        28: [Part.BERLO],
+    }
+
+    def __init__(
+            self, file=None, *, decoder=None, name=b'', creator=0,
+            parts_available=DEFAULT_PARTS_AVAILABLE, reagents=None,
+            products=None, output_scale=1, production_info=None
+    ):
+        self._hash = None
+        self.name = name
+        self.creator = creator
+        self.parts_available = parts_available
+        self.reagents = reagents or []
+        self.products = products or []
+        self.output_scale = output_scale
+        self.production_info = production_info
+        if isinstance(file, str):
+            with open(file, 'rb') as f:
+                decoder = Decoder(f.read())
+        elif isinstance(file, bytes):
+            decoder = Decoder(file)
+        elif isinstance(file, Puzzle):
+            decoder = Decoder(file.to_bytes())
+        elif file is not None:
+            raise ValueError(
+                'Puzzle() may only take a filename, bytes, or another Puzzle as a positional parameter'
+            )
+        if decoder is None:
+            return
+        if decoder.read_struct_format('<I') != (3,):
+            raise ValueError('unknown version number in puzzle file')
+        self.name = decoder.read_string()
+        self.creator, self.parts_available, nreagents = decoder.read_struct_format(
+            '<QQI'
+        )
+        for i in range(nreagents):
+            self.reagents.append(Molecule(decoder=decoder))
+        nproducts, = decoder.read_struct_format('<I')
+        for i in range(nproducts):
+            self.products.append(Molecule(decoder=decoder))
+        self.output_scale, = decoder.read_struct_format('<I')
+        if decoder.read_struct_format('<B') != (0,):
+            self.production_info = ProductionInfo(decoder=decoder)
+
+    def encode(self, encoder):
+        encoder.write_struct_format('<I', 3)
+        encoder.write_string(self.name)
+        encoder.write_struct_format(
+            '<QQI', self.creator, self.parts_available,
+            len(self.reagents)
+        )
+        for m in self.reagents:
+            m.encode(encoder)
+        encoder.write_struct_format('<I', len(self.products))
+        for m in self.products:
+            m.encode(encoder)
+        encoder.write_struct_format('<I', self.output_scale)
+        if self.production_info is not None:
+            encoder.write_struct_format('<B', 1)
+            self.production_info.encode(encoder)
+        else:
+            encoder.write_struct_format('<B', 0)
+
+    def to_bytes(self):
+        encoder = Encoder()
+        self.encode(encoder)
+        return encoder.bytes
+
+    def write_to_path(self, filename):
+        with open(filename, 'wb') as f:
+            f.write(self.to_bytes())
+
+    def are_parts_available(self, parts):
+        return self.parts_available & parts == parts
+
+    def are_parts_banned(self, parts):
+        return ~self.parts_available & parts == parts
+
+    def flag_names(self):
+        return [
+            Puzzle.FLAG_NAMES[i]
+            if i in Puzzle.FLAG_NAMES
+            else str(i)
+            for i in self.all_puzzle_flags()
+        ]
+
+    def all_puzzle_flags(self):
+        return [i for i in range(32) if 1 << i & self.parts_available]
+
+    def nondef_puzzle_flags(self):
+        return [i for i in range(32)
+            if
+            1 << i & self.parts_available & ~om.Puzzle.DEFAULT_PARTS_AVAILABLE]
+
+    def full_parts_list(self) -> list[bytes]:
+        return [
+            part
+            for flag in self.all_puzzle_flags()
+            if flag in Puzzle.FLAG_PARTS
+            for part in Puzzle.FLAG_PARTS[flag]
+        ]
+
+    def nondef_parts_list(self) -> list[bytes]:
+        return [
+            part
+            for flag in self.nondef_puzzle_flags()
+            if flag in Puzzle.FLAG_PARTS
+            for part in Puzzle.FLAG_PARTS[flag]
+        ]
+
+    def molecules(self):
+        return self.reagents + self.products
+
+    def atom_types(self) -> list[int]:
+        return sorted(list({
+            atom.type
+            for mole in self.molecules()
+            for atom in mole.atoms
+        }))
+
+    def reagent_types(self) -> list[int]:
+        return sorted(list({
+            atom.type
+            for mole in self.reagents
+            for atom in mole.atoms
+        }))
+
+    def product_types(self) -> list[int]:
+        return sorted(list({
+            atom.type
+            for mole in self.products
+            for atom in mole.atoms
+        }))
+
+    def bond_types(self) -> list[int]:
+        return sorted(list({
+            bond.type
+            for mole in self.molecules()
+            for bond in mole.bonds
+        }))
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = hash((
+                self.name, self.creator, self.parts_available,
+                tuple(self.reagents),
+                tuple(self.products), self.output_scale
+            ))
+        return self._hash
+
+    def __str__(self):
+        return "Puzzle(%s)" % self.name
 
 
 class Sim:

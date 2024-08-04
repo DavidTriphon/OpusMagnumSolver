@@ -1,7 +1,6 @@
 import om
 from pathlib import Path
 import os
-import puzzleparts
 
 OUTPUT_PATH = Path("output\\24hour-1-test")
 SAVEDATA_PATH = Path("savedata")
@@ -117,7 +116,7 @@ def filter_uses_parts(puzzles: list[om.Puzzle], parts_list: list[bytes],
     return [
         p for p in puzzles
         if func_any_or_all(
-            part in puzzleparts.full_parts_list(p)
+            part in p.full_parts_list()
                 for part in parts_list
         )
     ]
@@ -128,7 +127,7 @@ def filter_bans_parts(puzzles: list[om.Puzzle], parts_list: list[bytes],
     return [
         p for p in puzzles
         if func_any_or_all(
-            part not in puzzleparts.full_parts_list(p)
+            part not in p.full_parts_list()
                 for part in parts_list
         )
     ]
