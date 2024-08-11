@@ -125,3 +125,12 @@ TESTS THAT DEFINE BONDING REQUIREMENT BORDERS:
           both options are equal cost
           calcifying is preferable since it does not produce waste in the ratio
         salt-fire inherently requires bonding
+
+TESTS THAT RE-USE BONDS FROM INPUT:
+    puzzles that don't require a debonder and reagents have bonds
+
+- test 001:
+    QS + QS + Air-Air => QS-Fire-Fire-Water-Air
+    use calcification, duplication, and berlo to change air into elementals
+
+

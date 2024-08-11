@@ -146,7 +146,7 @@ test 054:
         calcifier can be within 1-2 spaces away from the hand slots since the
           max dist between S atoms in the product and other atoms is 2.
 
-HYPOTHETICALs:
+HYPOTHETICALS:
     3 reagents, 1 product, and 1 arm is not possible without track.
     3 reagents, 2 product, and 1 arm is possible in select cases.
         not when all 3 reagents are used in one product.

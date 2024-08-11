@@ -1,0 +1,75 @@
+2024-08-11:
+
+to search for the lowest cost parts, use the same methodology as
+recipes.search_min_partlist(), but use sets of possible molecules instead of
+sets of possible types
+
+however a new problem arises, as soon as you add the bonder part, the set of all
+possible molecules becomes infinite.
+
+To deal with that, the "set of all possible molecules" can be turned into an
+alternative data structure that can calculate whether a given molecule is
+possible to construct with the current partlist. Which is what we're actually
+after in the first place.
+
+This leads to a new conclusion, that for each node in that search, the set of
+possible data types is the sum of connected nodes of that recipes connect for
+the given list of parts. since the number of atom types in finite, the set is
+always finite. But for molecules and bonds, it's different.
+
+Each node really represents a graph of possible traversals or transformations of
+the molecule states on the board. Since parts can be used infinite times, each
+item in the set represents infinite of that molecule. This is akin to if we
+tracked the board's molecule state with bags of molecules, counting the
+instances of different types of molecules without regard to position and
+rotation. Using bags would be the native way to define a state for searching
+possible molecules that could be built while optimizing for cycles.
+
+ergo I need a way to define a molecule ambiguous to its position in the world or
+its rotation in the world. I have come up with 2 possible approaches:
+
+    1) For every molecule with a given set of positions, there is a "center"
+rotation and center position that it collapses to. I can easily center a
+molecule by finding the min x and min y of all atom positions and then
+subtracting that from all positions. But I have yet to think of a way to have a
+"centered" rotation that is assured to always be the same for any given rotation
+of a molecule.
+    I think the advantage to this approach is that it would allow faster
+equality checks and rotation and translation logic for converting between arm
+space and hex space.
+
+    2) define every position of every atom and bond in the molecule relative to
+another 2 molecules. I can only imagine implementing this by listing the
+possible positions of every atom and bond literally in memory for every atom
+combination. It could be compressed by having the first atom be (0,0) and the
+second atom define the sector_hextant direction of X or something, but that's
+still 6 position maps of atoms per every atom, which is n^2 memory space for n
+atoms.
+    I forsee a problem with approach, which is that it cannot be re-actualized
+into hex space with a position and rotation, but instead a tuple of atoms, which
+is how the memory itself is designed.
+
+I think I will try to go with #1 for now. I think it might be possible if I look
+at bounding hexagon, then shape-sided-ness, atom type sideness, and then
+bond-sided-ness. After that, it should be up to inherent symmetry in the
+molecule that makes it return limited angle values to the "center" rotation.
+
+
+
+In regard to the cost search I mentioned earlier, defining the set of all
+possible molecules can be compressed for certain part combinations. For example,
+when both a bonder and debonder part are added to the list of parts, the method
+becomes equivalent to the current recipes.search_min_partlist(), since all
+molecules could be made with the given available atom types (ignoring triplex).
+
+It's important to remember that consumers and producers on parts consume whole
+molecules, but that conversions act on individual atoms.
+
+There's an interesting case for when conversions are available but bonders are
+not. This means if calcification is available, and the reagent is W-E-A, then
+all molecules that match [W,S]-[E,S]-[A,S] are possible. This could S-S-A, or
+W-S-A, or S-E-A, you get the idea. This represents 8 different possible
+molecules to put in the set, but we could consider instead representing it as a
+single matching pattern in the node search state. If the product were any of
+these 8 molecules, that would be a quick and cheap solution to only use
+calcification.

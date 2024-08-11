@@ -1,0 +1,177 @@
+Thoughts on how I solve puzzles:
+
+test 000:
+    all reagents are single atoms
+    product has bonds
+    ergo. bonder is required
+    product has silver and vitae in it.
+    vitae is available via reagents
+    silver can only be made from projecting copper with quicksilver
+    that solves all materials.
+    the rest of the puzzle is positioning and creating the bonds
+    all 3 reagents are necessary.
+
+    for a cost solution:
+        3 reagents means at least 2 pieces of track in order to move the
+        reagents past each other.
+        2 hand slots for the projection
+        2 hand slots for the bonder
+        3 for the reagents
+        1 for the product
+        that's over 6 but under 12, no need to add more track
+        this is solveable with 1 arm, 2 tracks, 1 projector, 1 bonder
+        min cost is 10+10+20+10 = 50
+
+        in order to position the parts correctly:
+            the quicksilver needs to move from the reagent to the projection
+            consumer iris
+            the copper needs to be able to move to the projection conversion
+            slot, and then from there, access to the bonder slots
+            the vitae needs to be able to move to the bonder slots.
+            bond operations will all take place on top of the bonder, so the arm
+            needs space to be able to create all the bonds. The best chance for
+            that is an arm of length 2 where the bonder is parallel to the
+            tracks, because that puts 1 hex of free space between the bonder and
+            the arm base at all times, it creates the least amount of
+            restrictions for space. All bond types should be possible without
+            need for analysis of bond arrangements for having all single atom
+            reagents.
+
+test 001:
+    There is a duplicate reagents for quicksilver
+    The other reagent has a bond between two airs.
+    It is the only reagent with elemental types.
+    There is duplication available in puzzle, which means that the air atoms can
+    be converted into any other elemental.
+
+    The product contasins fire, water, and air. The only elemental reagent type
+    is air. fire and water can only be produced via calcification and berlo
+    duplication. thus the berlo wheel, duplicator, and calcifier are necessary.
+
+    There exists an arrangement of the reagents that creates the product without
+    debonding. reagent 1 bonded to reagent 2 bonded to reagent 2. The elementals
+    will need converted accordingly. this eliminates the potential need for a
+    debonder.
+
+    ===: THOUGHT PATTERN :===
+    My conclusions about what parts are necessary are akin to discovering what
+    constraints exist on the optimal solution. Perhaps my instincts that categorize
+    puzzles are doing so because different sets of constraints require different
+    kinds of approaches?
+    ======
+
+    for a cost solution:
+        required parts:
+            1 QS reagent
+            1 Air-Air reagent
+            1 bonder
+            1 duplicator
+            1 calcifier
+            1 arm
+
+            tracks=?
+
+                reagents can be bonded before the conversion of any elementals
+                is necessary. Thus the calcifier and duplicator parts that
+                conver the elemental atoms do not need to be within hand range.
+
+                I can imagine a scenario to bond all of the atoms together with
+                a length 2 arm without track, which means that it is not
+                necessary to have the arm able to grab both bonder slots. It
+                only requires 1 bonder slot.
+                However I am having a difficult time imagining being able to
+                calcify all necessary atoms after bonding them with a trackless
+                length 2 arm. I think the principle of channels applies here in
+                a way that restricts the grabbable atoms from exiting the
+                grabbable channel, and vice versa, the ungrabbable atoms from
+                entering the grabbable channel. Since atoms that require
+                calcifying exist both inside and outside the grabbable channel,
+                that means there is no space that exists that can calcify both
+                groups. ergo, if the arm is trackless, it must be length 1, not
+                2 or 3. length 1 will make all atoms grabbable by collapsing all
+                4 channels (or rather, the grab channel and the not-grab
+                channels) into 1 channel (which is grabbable).
+
+                ===: GENERALIZATION :===
+                In other puzzles, if the arm is trackless, I think the principle
+                of channels will always apply. But if the arm has tracks,
+                regardless of arm length, all channels collapse, since pivoting
+                and translating one space should be able to make all channels on
+                a molecule grabbable.
+                ======
+
+            I accomplished a solution without using tracks
+
+            But I encountered issue based on where I chose to put the duplicator
+            and the bonder. There were collision issues based on the bonding
+            order and duplication order.
+
+            ===: GENERALIZATION :===
+            If the arm is trackless, then the side of the bonder the reagent can
+            move to is predetermined (based on the next molecule to get bonded.)
+
+            The exception for this case is when the molecule can reach around
+            the molecule that blocks its path.
+            ======
+
+test 345:
+    S + S + S + E => V-V-E
+    3 duplicate salt reagents
+    1 earth reagent
+
+    product contains vitae
+        no vitae in reagents
+        vitae can only be produced with animismus
+            animismus part is necessary
+            vitae must be produced via animismus
+            animismus produces vitae without bonds on it
+            vitae in product has bonds
+            vitae must use bonder to create bonds on vitae in product
+    animismus requires salt
+        salt is available in reagents.
+        salt can also be produced via calcification of earth
+        calcification is more expensive, but requires less reagents
+        these are tradeoff considerations.
+            when considering a low cost solution, first try to assert the path
+            with the lowest potential cost, the one without calcification
+
+    product contains earth
+        earth is available in reagents
+        earth cannot be produced by any parts available
+        reagent earth is the only option
+
+    salt to animismus to produce vitae and byproduct mors
+    vitae and earth to bonder to create shape of product
+    then output
+
+    min part list:
+        bonder
+            requires 2 hand slots that are adjacent
+                (all reagents are single atoms, so bonder requires 2)
+                either:
+                    arm length == 1 and track => 0
+                    arm length > 1 and track >= 2
+        animismus
+            requires 4 hand slots that are in 4 different channels
+                count track >= 4
+                arm length > 1
+        disposal is free, optional for mors
+            would require 1 hand slot, but is always less than the 12 mors
+            byproducts that would need their own slots.
+        4 tracks
+        1 arm of length 2 (required by animismus)
+            creates 24 hand slots on the board
+
+        cost = 10 + 20 + 0? + 4*5 + 20 = 70
+
+    There is no path that creates vitae that does not have a byproduct of
+    unusable mors. byproduct must be handled.
+        3 optional strategies for mors:
+            output mors to disposal (requires disposal)
+            use empty hand slot spaces for storing mors (cannot loop)
+            bond mors together in a chain going outwards (requires bonder)
+
+            I'm not certain what strategy is guaranteed to take fewest cycles.
+            The disposal is free, and a bonder is already required and re-usable,
+            so all of these strategies theoretically have no additional cost.
+

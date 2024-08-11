@@ -200,3 +200,18 @@ def expand_possible_types(types: list[int], available_parts: Node = None):
                                 type_checklist.append(product)
 
     return typelist
+
+
+def list_possible_theory_optimal_assembly_plans(puzzle):
+    # WIP of a method for recursively searching for ways to construct the
+    # product molecules
+    max_partlist = puzzle.full_parts_list()
+    available_recipes = [r for r in RECIPES if r.part in max_partlist]
+    atomtype_recipes = dict()
+
+    for product in puzzle.products:
+        for atom in product.atoms:
+            if atom.type not in atomtype_recipes:
+                atomtype_recipes[atom.type] = [r for r in RECIPES
+                    if atom.type in r.creates()]
+            available_recipes = atomtype_recipes[atom.type]

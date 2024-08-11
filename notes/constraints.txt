@@ -1,0 +1,115 @@
+constraints are rules.
+some are a reversal of conditions and their results.
+others are plain to see from the tutorial.
+
+simple rules:
+
+    - multiple parts may not have the same position
+    - a part has a position
+    - for every unique position of a part type, there is added cost according to its
+    type.
+    - a hex has a part in it or nothing in it.
+        (floor layer, not considering arm bases)
+    - the count of every part type is a non negative integer
+    - position and frame number is a lookup for a single atom type or null
+    - molecules don't appear from nowhere or disappear into nowhere
+    - the only atoms and bonds that exist in frame 0 match the position of
+    inputs and the molecules of those inputs
+
+
+
+reversal rules:
+
+some rules are about the origins and fates of material
+
+    - for a produced count to increase, a matching product molecule must be released
+    on top of it.
+    - for an atom to exist, it must have been created by an iris slot that had the
+    same type, or converted by a conversion slot from another type.
+    - for a bond to exist, it must have been created by a bonder or a reagent iris
+    that already had that bond on those atoms.
+
+some rules are frame-relational (for the purpose of cycles)
+
+    - for a molecule to exist in one frame at a certain position:
+        if the molecule is ungrabbed:
+            in the next and previous frame:
+                - it exists in the same position
+        if the molecule is grabbed:
+            - there is an arm who has at least 1 hand over the molecule and is
+            grabbing and grabbed
+            in the next and previous frame:
+                either:
+                    - the molecule is in a neighboring position within that
+                    arm's armspace and still grabbed
+                    - the molecule is in the same space grabbed or ungrabbed
+
+
+### theoretical imperative structure:
+
+test 345:
+    product is produced in cycle N
+        product exists in cycle N-1 and grabbed
+            arm is grabbing product molecule in cycle N-1
+
+        arm grabbing molecule executed drop instruction on cycle N
+            arm is not grabbing in cycle N
+
+    product is V-V-E
+        product exists in cycle N-1
+            V is in V-V-E
+                V is created before N-1
+                    V is created by animismus in frame X at pos A1
+                        animismus is fed 2 salts in frame X at pos A3 and A4
+                            salt is formed twice before frame X
+                        M is created by animismus in frame X at pos A2
+                V is created before N-1 (but different pos or cycle)
+                    V is created by animismus in frame Y at pos B1
+                        animismus is fed 2 salts in frame Y at pos B3 and B4
+                            salt is formed twice before frame Y
+                        M is created by animismus in frame Y at pos B2
+                        logical or:
+                            X != Y (time is not the same time)
+                            A != B (pos is not the same pos)
+
+                E is created before N-1
+                    E is formed by reagent E at frame Z
+
+    logical or:
+        X != Y (time is not the same time)
+        A != B (pos is not the same pos)
+
+    if animismus exists in different positions, then count(animismus) not < 2
+        ergo, in the interest of choosing the lesser cost path:
+            search for/assert that X != Y (time is not the same time)
+
+        Because this decision affects cost, it is a priority consideration.
+        How does the search procedure know to prioritize this decision, among
+        others?
+
+### How would I describe fully the constraints asserted on a single frame?
+
+frame independent information for parts that don't move:
+    Part(identity, type, pos, rotation)
+    Arm(identity, type)     # arm start info is just frame 0 dependent info
+frame dependent information:
+    # none for static parts
+    Arm(identity, frame, pos, rotation)
+
+These are facts/knowledge, not list forms for constraint possibilities.
+This form also doesn't exclude other facts from existing with the same primary
+keys.
+
+I want to be able to list constraints in a form similar to:
+    - pos of atom with identity X is at one of [posA, posB, posX]
+    - pos of part with identity A is at one of [posA]
+    - pos of part with identity B is at one of [* - posA - posC]
+    (pos of B cannot be at A or C but can be anywhere else)
+    - pos of part with identity C is at one of [posC]
+    - posA part later is part [A]
+    - posB part layer is part [Null, B]
+    - posC part layer is part [C]
+    - pos [anything else] part layer is part [Null, B]
+
+    - posD part layer is calcification, but actual pos is in [* - posA - posC]
+

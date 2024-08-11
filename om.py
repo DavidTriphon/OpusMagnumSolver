@@ -496,6 +496,7 @@ class Molecule:
         for bond in self.bonds:
             bond.translate(position, rotation)
         self._hash = None
+        return self
 
     def rotate(self, pivot_pos: Pos2D, rotation: Angle):
         for atom in self.atoms:
@@ -503,6 +504,30 @@ class Molecule:
         for bond in self.bonds:
             bond.rotate(pivot_pos, rotation)
         self._hash = None
+        return self
+
+    def translate_center(self):
+        min_x = min(atom.position[0] for atom in self.atoms)
+        min_y = min(atom.position[1] for atom in self.atoms)
+        return self.translate(position=(-min_x, -min_y))
+
+    def matches(self, other):
+        rotated_copies = [
+            self.copy().rotate((0, 0), rot).translate_center()
+            for rot in range(6)
+        ]
+        centered_other_copy = other.copy().translate_center()
+        return any(centered_other_copy == rotated_copy
+            for rotated_copy in rotated_copies)
+
+    def symmetry_angle(self):
+        centered_copy = self.translate_center()
+        rotated_copies = [
+            self.copy().rotate((0, 0), rot).translate_center()
+            for rot in range(6)
+        ]
+        equalities = [centered_copy == rot_copy for rot_copy in rotated_copies]
+        return 6 // sum(equalities)
 
     def overlap(self, space_s):
         # convert space_s to set of tuples for various types of input
