@@ -145,13 +145,14 @@ def neighbors(selected=(), available=None) -> list[Node]:
     return nbs
 
 
-def search_min_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
+def search_cheapest_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
     product_types = puzzle.product_types()
     reagent_types = puzzle.reagent_types()
     available_parts = puzzle.full_parts_list()
-    start: Node = ()
+    start: Node = tuple(search_required_partlist(puzzle))
     node_cost: dict[Node, int] = {start: 0}
-    node_types: dict[Node, list[int]] = {start: reagent_types}
+    node_types: dict[Node, list[int]] = {start: expand_possible_types(
+        reagent_types, start)}
     frontier: list[Node] = [start]
     explored: set[Node] = set()
 
@@ -202,6 +203,82 @@ def expand_possible_types(types: list[int], available_parts: Node = None):
     return typelist
 
 
+def search_required_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
+    required_parts = []
+    available_parts = puzzle.full_parts_list()
+    available_recipes = [r for r in RECIPES if r.part in available_parts]
+
+    # if product size is bigger than all reagent sizes, bonder is required
+    if any(
+            all(len(r.atoms) < len(p.atoms) for r in puzzle.reagents)
+                    for p in puzzle.products
+    ):
+        required_parts.append(om.Part.BONDER)
+
+    # if product size is smaller than all reagent sizes, debonder is required
+    if any(
+            all(len(r.atoms) > len(p.atoms) for r in puzzle.reagents)
+                    for p in puzzle.products
+    ):
+        required_parts.append(om.Part.UNBONDER)
+
+    # if an atom type exists in the product and not in the reagents, and
+    # there is only one available part that makes it, that part is required.
+    required_types = [(t, ()) for t in puzzle.product_types()]
+    reagent_types = puzzle.reagent_types()
+
+    while required_types:
+        p_type, prev_types = required_types.pop()
+        if p_type not in reagent_types:
+            p_recipes = [
+                r for r in available_recipes
+                if p_type in r.list_created()
+                and all(t not in prev_types for t in r.list_required())
+            ]
+            recipe_parts = set(r.part for r in p_recipes)
+            if len(recipe_parts) == 1:
+                if len(p_recipes) == 1:
+                    for r_type in p_recipes[0].list_required():
+                        # this needs some kind of recursion check to avoid
+                        # infinite looping in the case unsatisfiable loops
+                        required_types.append(
+                            (r_type, (p_type,) + prev_types))
+                    for hover_type in p_recipes[0].hovers:
+                        # this is always true
+                        if hover_type not in reagent_types:
+                            if om.Part.BERLO not in required_parts:
+                                required_parts.append(om.Part.BERLO)
+                        else:
+                            raise NotImplementedError(
+                                "Somehow a hover was needed that was "
+                                "already satisfied by the reagents...")
+                part = list(recipe_parts)[0]
+                if part not in required_parts:
+                    required_parts.append(part)
+            elif len(p_recipes) == 0:
+                # invalid situation, atom type not satisfiable
+                return None
+
+    # for any given atom type in a product, if all the reagents that
+    # contain that atom type have more atoms of that type than the
+    # product, a debonder is required.
+    # This is not true if a conversion recipe is added that creates more
+    # reagents that could contain that atom type. So this rule only holds if
+    # there are no more recipes to add that could possibly reveal this atom
+    # type.
+
+    # for any given atom type in a product, if all the reagents that
+    # contain that atom type have fewer atoms of that type than the
+    # product, a bonder is required.
+    # This is not true if a conversion recipe is added that creates more
+    # reagents that could contain that atom type. So this rule only holds if
+    # there are no more recipes to add that could possibly reveal this atom
+    # type.
+
+    return required_parts
+
+
+
 def list_possible_theory_optimal_assembly_plans(puzzle):
     # WIP of a method for recursively searching for ways to construct the
     # product molecules
@@ -213,5 +290,5 @@ def list_possible_theory_optimal_assembly_plans(puzzle):
         for atom in product.atoms:
             if atom.type not in atomtype_recipes:
                 atomtype_recipes[atom.type] = [r for r in RECIPES
-                    if atom.type in r.creates()]
+                    if atom.type in r.list_created()]
             available_recipes = atomtype_recipes[atom.type]
