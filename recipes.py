@@ -73,6 +73,17 @@ class Recipe:
 
         return "Recipe(%s, %s)" % (self.part, val_str)
 
+    def __hash__(self):
+        return hash((self.part, tuple(self.produced), tuple(self.consumed),
+        tuple(self.conversions), tuple(self.hovers)))
+
+    def __eq__(self, other):
+        return (self.part == other.part
+                and self.consumed == other.consumed
+                and self.produced == other.produced
+                and self.conversions == other.conversions
+                and self.hovers == other.hovers)
+
 
 def recipe_calcify(element: int):
     return Recipe(om.Part.CALCIFICATION,
@@ -92,6 +103,10 @@ def recipe_purify(metal: int, metal_up: int):
 def recipe_project(metal: int, metal_up: int):
     return Recipe(om.Part.PROJECTION,
         consumed=[om.Atom.QUICKSILVER], conversions=[(metal, metal_up)])
+
+
+def recipe_reagent(type):
+    return Recipe(om.Part.INPUT, produced=[type])
 
 
 RECIPES: list[Recipe] = [
@@ -151,8 +166,10 @@ def search_cheapest_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
     available_parts = puzzle.full_parts_list()
     start: Node = tuple(search_required_partlist(puzzle))
     node_cost: dict[Node, int] = {start: 0}
-    node_types: dict[Node, list[int]] = {start: expand_possible_types(
-        reagent_types, start)}
+    node_types: dict[Node, list[int]] = {
+        start: expand_possible_types(
+            reagent_types, start)
+    }
     frontier: list[Node] = [start]
     explored: set[Node] = set()
 
@@ -233,7 +250,7 @@ def search_required_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
             p_recipes = [
                 r for r in available_recipes
                 if p_type in r.list_created()
-                and all(t not in prev_types for t in r.list_required())
+                   and all(t not in prev_types for t in r.list_required())
             ]
             recipe_parts = set(r.part for r in p_recipes)
             if len(recipe_parts) == 1:
@@ -278,17 +295,139 @@ def search_required_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
     return required_parts
 
 
+def constraint_solve_min_cost_partlist(puzzle):
+    # discover the smaller recipe list before we define a node since it
+    # catches it
+    available_parts = puzzle.full_parts_list()
+    available_recipes = [r for r in RECIPES if r.part in available_parts]
+    available_recipes += [recipe_reagent(t) for t in puzzle.reagent_types()]
 
-def list_possible_theory_optimal_assembly_plans(puzzle):
-    # WIP of a method for recursively searching for ways to construct the
-    # product molecules
-    max_partlist = puzzle.full_parts_list()
-    available_recipes = [r for r in RECIPES if r.part in max_partlist]
-    atomtype_recipes = dict()
+    # define the Node
+    class Node:
 
-    for product in puzzle.products:
-        for atom in product.atoms:
-            if atom.type not in atomtype_recipes:
-                atomtype_recipes[atom.type] = [r for r in RECIPES
-                    if atom.type in r.list_created()]
-            available_recipes = atomtype_recipes[atom.type]
+        def __init__(self, partlist: list[bytes] = None,
+                type_solves: dict[int, list[Recipe]] = None,
+                prev_types: dict[int, list[int]] = None):
+            self.partlist = [] if partlist is None else sorted(partlist)
+            self.type_solves = type_solves or dict()
+            self.prev_types = prev_types or dict()
+
+        def copy(self):
+            return Node(self.partlist.copy(), self.type_solves.copy(),
+                self.prev_types.copy())
+
+        def cost(self):
+            return sum(om.Part.COSTS[part] for part in self.partlist)
+
+        def unsolved(self):
+            return [(k, v) for k, v in self.type_solves.items() if len(v) > 1]
+
+        def satisfied(self):
+            return all(len(v) == 1 for _, v in self.type_solves.items())
+
+        def satisfiable(self):
+            return all(len(v) > 0 for _, v in self.type_solves.items())
+
+        def available_solves_for(self, type):
+            return [
+                r for r in available_recipes
+                if type in r.list_created()
+                   and all(
+                    t not in self.prev_types.get(type, {})
+                        for t in r.list_required()
+                )
+            ]
+
+        def assign(self, type, recipe=None):
+            if recipe is not None:
+                if recipe not in self.type_solves[type]:
+                    raise ValueError(
+                        "This recipe is not in the available options")
+                self.type_solves[type] = [recipe]
+            else:
+                # recipe=None means we think there is already only 1 recipe.
+                if len(self.type_solves[type]) != 1:
+                    raise ValueError(
+                        "recipe is None but there is not only 1 option.")
+                recipe = self.type_solves[type][0]
+            self.add_part(recipe.part)
+            if len(recipe.hovers) > 0:
+                self.add_part(om.Part.BERLO)
+            for new_type in recipe.list_required():
+                if new_type in self.type_solves.keys():
+                    if new_type in self.prev_types[type]:
+                        raise ValueError("%s loops" % type)
+                # always update if key is in or not
+                if not self.update_constraint(new_type, type):
+                    return False
+            return self
+
+        def update_constraint(self, type, prev_type=None):
+            all_prev_types = [] if prev_type is None else \
+                self.prev_types[prev_type] + [prev_type]
+            if type not in self.prev_types:
+                self.prev_types[type] = []
+            self.prev_types[type] = self.prev_types[type] + all_prev_types
+
+            self.type_solves[type] = self.available_solves_for(type)
+            if len(self.type_solves[type]) == 0:
+                return False
+            if len(self.type_solves[type]) == 1:
+                if not self.assign(type):
+                    return False
+            return self
+
+        def add_part(self, part):
+            if part not in self.partlist:
+                bisect.insort(self.partlist, part)
+            return self
+
+        def neighbors(self):
+            unsolved = sorted(self.unsolved(), key=lambda kv: len(kv[1]))
+            neighbors = []
+            for recipe in unsolved[0][1]:
+                copy = self.copy()
+                if copy.assign(unsolved[0][0], recipe):
+                    neighbors.append(copy)
+            return neighbors
+
+        def __hash__(self):
+            return hash((
+                tuple(self.partlist),
+                tuple(sorted(
+                    (k, tuple(v)) for k, v in self.type_solves.items()
+                )),
+                tuple(sorted(
+                    (k, tuple(v)) for k, v in self.prev_types.items()
+                ))
+            ))
+
+        def __eq__(self, other):
+            return (self.partlist == other.partlist and
+                    self.type_solves == other.type_solves and
+                    self.prev_types == other.prev_types)
+
+    # NOW begins the dijkstra solve
+    start = Node()
+    for type in puzzle.product_types():
+        start.update_constraint(type)
+    if not start.satisfiable():
+        return None
+
+    costs = {start: start.cost()}
+    frontier = [start]
+    explored = set()
+
+    while frontier:
+        current = frontier.pop()
+        if current not in explored:
+            explored.add(current)
+            if current.satisfied():
+                partlist = current.partlist
+                partlist.remove(om.Part.INPUT)
+                return partlist
+            for neighbor in current.neighbors():
+                costs[neighbor] = neighbor.cost()
+                bisect.insort_right(frontier, neighbor, key=lambda n: -costs[n])
+
+    return None
