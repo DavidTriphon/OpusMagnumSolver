@@ -1,5 +1,6 @@
 import bisect
 
+import graph
 import om
 
 
@@ -295,6 +296,116 @@ def search_required_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
     return required_parts
 
 
+class CostConstraintNode(graph.BaseNode):
+
+    def __init__(self, available_recipes, partlist: list[bytes] = None,
+            type_solves: dict[int, list[Recipe]] = None,
+            prev_types: dict[int, list[int]] = None):
+        self.available_recipes = available_recipes
+        self.partlist = [] if partlist is None else sorted(partlist)
+        self.type_solves = type_solves or dict()
+        self.prev_types = prev_types or dict()
+
+    def copy(self):
+        return CostConstraintNode(
+            self.available_recipes,
+            self.partlist.copy(),
+            self.type_solves.copy(),
+            self.prev_types.copy())
+
+    def cost(self):
+        return sum(om.Part.COSTS[part] for part in self.partlist)
+
+    def unsolved(self):
+        return [(k, v) for k, v in self.type_solves.items() if len(v) > 1]
+
+    def satisfied(self):
+        return all(len(v) == 1 for _, v in self.type_solves.items())
+
+    def satisfiable(self):
+        return all(len(v) > 0 for _, v in self.type_solves.items())
+
+    def available_solves_for(self, type):
+        return [
+            r for r in self.available_recipes
+            if type in r.list_created()
+               and all(
+                t not in self.prev_types.get(type, {})
+                    for t in r.list_required()
+            )
+        ]
+
+    def assign(self, type, recipe=None):
+        if recipe is not None:
+            if recipe not in self.type_solves[type]:
+                raise ValueError(
+                    "This recipe is not in the available options")
+            self.type_solves[type] = [recipe]
+        else:
+            # recipe=None means we think there is already only 1 recipe.
+            if len(self.type_solves[type]) != 1:
+                raise ValueError(
+                    "recipe is None but there is not only 1 option.")
+            recipe = self.type_solves[type][0]
+        self.add_part(recipe.part)
+        if len(recipe.hovers) > 0:
+            self.add_part(om.Part.BERLO)
+        for new_type in recipe.list_required():
+            if new_type in self.type_solves.keys():
+                if new_type in self.prev_types[type]:
+                    raise ValueError("%s loops" % type)
+            # always update if key is in or not
+            if not self.update_constraint(new_type, type):
+                return False
+        return self
+
+    def update_constraint(self, type, prev_type=None):
+        all_prev_types = [] if prev_type is None else \
+            self.prev_types[prev_type] + [prev_type]
+        if type not in self.prev_types:
+            self.prev_types[type] = []
+        self.prev_types[type] = self.prev_types[type] + all_prev_types
+
+        self.type_solves[type] = self.available_solves_for(type)
+        if len(self.type_solves[type]) == 0:
+            return False
+        if len(self.type_solves[type]) == 1:
+            if not self.assign(type):
+                return False
+        return self
+
+    def add_part(self, part):
+        if part not in self.partlist:
+            bisect.insort(self.partlist, part)
+        return self
+
+    def neighbors_edges(self):
+        unsolved = sorted(self.unsolved(), key=lambda kv: len(kv[1]))
+        neighbors = []
+        for recipe in unsolved[0][1]:
+            copy = self.copy()
+            if copy.assign(unsolved[0][0], recipe):
+                neighbors.append(copy)
+        edges = [None for i in range(len(neighbors))]
+        return neighbors, edges
+
+    def __hash__(self):
+        return hash((
+            tuple(self.partlist),
+            tuple(sorted(
+                (k, tuple(v)) for k, v in self.type_solves.items()
+            )),
+            tuple(sorted(
+                (k, tuple(v)) for k, v in self.prev_types.items()
+            ))
+        ))
+
+    def __eq__(self, other):
+        return (self.partlist == other.partlist and
+                self.type_solves == other.type_solves and
+                self.prev_types == other.prev_types)
+
+
 def constraint_solve_min_cost_partlist(puzzle):
     # discover the smaller recipe list before we define a node since it
     # catches it
@@ -302,132 +413,15 @@ def constraint_solve_min_cost_partlist(puzzle):
     available_recipes = [r for r in RECIPES if r.part in available_parts]
     available_recipes += [recipe_reagent(t) for t in puzzle.reagent_types()]
 
-    # define the Node
-    class Node:
-
-        def __init__(self, partlist: list[bytes] = None,
-                type_solves: dict[int, list[Recipe]] = None,
-                prev_types: dict[int, list[int]] = None):
-            self.partlist = [] if partlist is None else sorted(partlist)
-            self.type_solves = type_solves or dict()
-            self.prev_types = prev_types or dict()
-
-        def copy(self):
-            return Node(self.partlist.copy(), self.type_solves.copy(),
-                self.prev_types.copy())
-
-        def cost(self):
-            return sum(om.Part.COSTS[part] for part in self.partlist)
-
-        def unsolved(self):
-            return [(k, v) for k, v in self.type_solves.items() if len(v) > 1]
-
-        def satisfied(self):
-            return all(len(v) == 1 for _, v in self.type_solves.items())
-
-        def satisfiable(self):
-            return all(len(v) > 0 for _, v in self.type_solves.items())
-
-        def available_solves_for(self, type):
-            return [
-                r for r in available_recipes
-                if type in r.list_created()
-                   and all(
-                    t not in self.prev_types.get(type, {})
-                        for t in r.list_required()
-                )
-            ]
-
-        def assign(self, type, recipe=None):
-            if recipe is not None:
-                if recipe not in self.type_solves[type]:
-                    raise ValueError(
-                        "This recipe is not in the available options")
-                self.type_solves[type] = [recipe]
-            else:
-                # recipe=None means we think there is already only 1 recipe.
-                if len(self.type_solves[type]) != 1:
-                    raise ValueError(
-                        "recipe is None but there is not only 1 option.")
-                recipe = self.type_solves[type][0]
-            self.add_part(recipe.part)
-            if len(recipe.hovers) > 0:
-                self.add_part(om.Part.BERLO)
-            for new_type in recipe.list_required():
-                if new_type in self.type_solves.keys():
-                    if new_type in self.prev_types[type]:
-                        raise ValueError("%s loops" % type)
-                # always update if key is in or not
-                if not self.update_constraint(new_type, type):
-                    return False
-            return self
-
-        def update_constraint(self, type, prev_type=None):
-            all_prev_types = [] if prev_type is None else \
-                self.prev_types[prev_type] + [prev_type]
-            if type not in self.prev_types:
-                self.prev_types[type] = []
-            self.prev_types[type] = self.prev_types[type] + all_prev_types
-
-            self.type_solves[type] = self.available_solves_for(type)
-            if len(self.type_solves[type]) == 0:
-                return False
-            if len(self.type_solves[type]) == 1:
-                if not self.assign(type):
-                    return False
-            return self
-
-        def add_part(self, part):
-            if part not in self.partlist:
-                bisect.insort(self.partlist, part)
-            return self
-
-        def neighbors(self):
-            unsolved = sorted(self.unsolved(), key=lambda kv: len(kv[1]))
-            neighbors = []
-            for recipe in unsolved[0][1]:
-                copy = self.copy()
-                if copy.assign(unsolved[0][0], recipe):
-                    neighbors.append(copy)
-            return neighbors
-
-        def __hash__(self):
-            return hash((
-                tuple(self.partlist),
-                tuple(sorted(
-                    (k, tuple(v)) for k, v in self.type_solves.items()
-                )),
-                tuple(sorted(
-                    (k, tuple(v)) for k, v in self.prev_types.items()
-                ))
-            ))
-
-        def __eq__(self, other):
-            return (self.partlist == other.partlist and
-                    self.type_solves == other.type_solves and
-                    self.prev_types == other.prev_types)
-
-    # NOW begins the dijkstra solve
-    start = Node()
+    start = CostConstraintNode(available_recipes)
     for type in puzzle.product_types():
         start.update_constraint(type)
     if not start.satisfiable():
         return None
 
-    costs = {start: start.cost()}
-    frontier = [start]
-    explored = set()
+    end, cost = start.node_search(
+        goal_condition=lambda node: node.satisfied(),
+        cost_func=lambda node: node.cost(),
+    )
 
-    while frontier:
-        current = frontier.pop()
-        if current not in explored:
-            explored.add(current)
-            if current.satisfied():
-                partlist = current.partlist
-                partlist.remove(om.Part.INPUT)
-                return partlist
-            for neighbor in current.neighbors():
-                costs[neighbor] = neighbor.cost()
-                bisect.insort_right(frontier, neighbor, key=lambda n: -costs[n])
-
-    return None
+    return end.partlist
