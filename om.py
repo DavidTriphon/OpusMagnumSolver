@@ -969,6 +969,80 @@ class Part:
         CONDUIT: 0,
     }
 
+    AREAS = {
+        ARM1: 1,
+        ARM2: 1,
+        ARM3: 1,
+        ARM6: 1,
+        PISTON: 1,
+        TRACK: 1,
+        BERLO: 1,
+        BONDER: 2,
+        UNBONDER: 2,
+        TRIPLEX: 3,
+        MULTIBONDER: 4,
+        CALCIFICATION: 1,
+        DISPERSION: 5,
+        DISPOSAL: 7,
+        DUPLICATION: 2,
+        ANIMISMUS: 4,
+        EQUILIBRIUM: 1,
+        PROJECTION: 2,
+        PURIFICATION: 3,
+        UNIFICATION: 5,
+        INPUT: 1,
+        OUTPUT_STANDARD: 1,
+        OUTPUT_REPEATING: 1,
+        CONDUIT: 1,
+    }
+
+    @staticmethod
+    def channels(type, armlength):
+        if armlength < 1:
+            raise ValueError("armlength must be a positive integer")
+
+        if armlength == 1:
+            return 1
+        elif armlength == 2:
+            d = {
+                Part.BONDER: 2,
+                Part.UNBONDER: 2,
+                Part.TRIPLEX: 3,
+                Part.MULTIBONDER: 4,
+                Part.CALCIFICATION: 1,
+                Part.DISPERSION: 4,
+                Part.DISPOSAL: 1,
+                Part.DUPLICATION: 2,
+                Part.ANIMISMUS: 4,
+                Part.PROJECTION: 2,
+                Part.PURIFICATION: 3,
+                Part.UNIFICATION: 3,
+                Part.INPUT: 1,
+                Part.OUTPUT_STANDARD: 1,
+                Part.OUTPUT_REPEATING: 1,
+            }
+            return d[type]
+        elif armlength >= 3:
+            d = {
+                Part.BONDER: 2,
+                Part.UNBONDER: 2,
+                Part.TRIPLEX: 3,
+                Part.MULTIBONDER: 4,
+                Part.CALCIFICATION: 1,
+                Part.DISPERSION: 5,
+                Part.DISPOSAL: 1,
+                Part.DUPLICATION: 2,
+                Part.ANIMISMUS: 4,
+                Part.PROJECTION: 2,
+                Part.PURIFICATION: 3,
+                Part.UNIFICATION: 5,
+                Part.INPUT: 1,
+                Part.OUTPUT_STANDARD: 1,
+                Part.OUTPUT_REPEATING: 1,
+            }
+            return d[type]
+
+
     # tick part evaluation order:
     # 1. grabs/drops
     # 2. consumers trigger
