@@ -113,3 +113,25 @@ I want to be able to list constraints in a form similar to:
 
     - posD part layer is calcification, but actual pos is in [* - posA - posC]
 
+2024-08-14:
+
+Now that I've implemented a function that explores constraint propagation for
+least cost in order to create all required types, I want to scale it up, using
+the same model.
+
+I want to scale it up to consider individual atoms that are part of molecules.
+
+In sudoku, there are two kinds of constraints:
+    in a unit U, for digit D, which square S is D in?
+    in square S, what is digit D?
+
+current constraints are:
+    (1+) atom types are made by a part or reagent
+
+future constraints to add:
+    (1) each atom is made by a part or a reagent
+    (1) parts have a position (if they are not None)
+    (1) parts have a rotation (if they are not None)
+    (1) positions refer to a hex of a part
+    (1) there is a non-negative count for each part type
+    (*) parts have a list of hexes in different positions (constant)
