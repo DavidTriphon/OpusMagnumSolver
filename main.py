@@ -84,6 +84,29 @@ def calc_io_ratio(puzzle: om.Puzzle) -> tuple[int, int]:
     raise NotImplementedError
 
 
+# puzzle = puzzledb.get_test_puzzles[995]
+# find_atom_steps(puzzle.products[0], puzzle.reagents[0], {i:0 for i in range(6)})
+def find_atom_steps(product_molecule, reagent_molecule, pr_mapping):
+    all_steps = []
+    for p_i, p_atom in enumerate(product_molecule.atoms):
+        r_i = pr_mapping[p_i]
+        r_atom = reagent_molecule.atoms[r_i]
+        steps = []
+        if p_atom.type != r_atom.type:
+            steps.append("calcify")
+        p_bonds = [b for b in product_molecule.bonds
+            if p_atom.position in b.positions]
+        for p_bond in p_bonds:
+            other_p_atom_pos = [pos for pos in p_bond.positions
+                if pos != p_atom.position][0]
+            other_p_atom_i = [i for i, atom
+                in enumerate(product_molecule.atoms)
+                if atom.position == other_p_atom_pos][0]
+            steps.append("bond to %d" % other_p_atom_i)
+        all_steps.append(steps)
+    return all_steps
+
+
 def main_investigate_puzzle():
     puzzle = om.Puzzle("resources\\24hour-1-sample\\GEN000.puzzle")
     display.print_puzzle_details(puzzle)
