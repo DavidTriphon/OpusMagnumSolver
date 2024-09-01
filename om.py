@@ -996,6 +996,38 @@ class Part:
         CONDUIT: 1,
     }
 
+    COMPATIBLE_MIN_ARM_LENGTH = {
+        BONDER, UNBONDER, CALCIFICATION, DUPLICATION, PROJECTION,
+        INPUT, OUTPUT_STANDARD, OUTPUT_REPEATING, CONDUIT,
+    }
+
+    ACCESSES = {
+        ARM1: [0],
+        ARM2: [0],
+        ARM3: [0],
+        ARM6: [0],
+        PISTON: [0],
+        TRACK: [0],
+        BERLO: [0],
+        BONDER: list(range(3)),
+        UNBONDER: list(range(3)),
+        TRIPLEX: list(range(4)),
+        MULTIBONDER: list(range(5)),
+        CALCIFICATION: list(range(2)),
+        DISPERSION: [5],
+        DISPOSAL: [1],
+        DUPLICATION: list(range(3)),
+        ANIMISMUS: [4],
+        EQUILIBRIUM: [0],
+        PROJECTION: list(range(1, 3)),
+        PURIFICATION: [3],
+        UNIFICATION: [5],
+        INPUT: [1],
+        OUTPUT_STANDARD: [1],
+        OUTPUT_REPEATING: list(range(2)),
+        CONDUIT: [1],
+    }
+
     @staticmethod
     def channels(type, armlength):
         if armlength < 1:
