@@ -390,7 +390,6 @@ import pathlib
 
 import numpy as np
 import hexmath
-import om
 
 from sharedtypes import *
 
@@ -882,6 +881,14 @@ class Solution:
         nparts, = decoder.read_struct_format('<I')
         for i in range(nparts):
             self.parts.append(Part(decoder=decoder))
+
+    def get_arm_parts(self) -> list:
+        return sorted(
+            [part for part in self.parts
+                if part.name in Part.PARTS_PROGRAMMABLE],
+            key=lambda part: part.arm_number
+        )
+
 
     def encode(self, encoder):
         encoder.write_struct_format('<I', 7)
@@ -1458,7 +1465,7 @@ class Puzzle:
     def nondef_puzzle_flags(self):
         return [i for i in range(32)
             if
-            1 << i & self.parts_available & ~om.Puzzle.DEFAULT_PARTS_AVAILABLE]
+            1 << i & self.parts_available & ~Puzzle.DEFAULT_PARTS_AVAILABLE]
 
     def full_parts_list(self) -> list[bytes]:
         return [

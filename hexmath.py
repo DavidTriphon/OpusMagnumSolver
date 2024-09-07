@@ -9,6 +9,7 @@ ROTATION_VECTORS = [(1, 0), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, -1)]
 
 def pos_from_direction(magnitude: int, direction: int | float,
         offset: int = None) -> Pos:
+    direction %= 6
     if magnitude == 0:
         return 0, 0
     if magnitude < 0:
@@ -92,6 +93,24 @@ def direction_float(vec: Pos) -> float | None:
     else:  # vec_sum * vec_diff > 0
         base = 2 if y > 0 else 5
         return base + (vec_sum / x)
+
+
+def hextant(pos: Pos2D) -> int | None:
+    if pos == (0, 0):
+        return None
+    x, y = pos
+    if x > 0 and y >= 0:
+        return 0
+    elif x <= 0 and y > -x:
+        return 1
+    elif x < 0 and y > 0:
+        return 2
+    elif x < 0 and y <= 0:
+        return 3
+    elif x >= 0 and y < -x:
+        return 4
+    elif x > 0 and y < 0:
+        return 5
 
 
 def angle_directions(rot1: float | int, rot2: float | int) -> float | int:

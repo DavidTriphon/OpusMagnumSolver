@@ -97,27 +97,141 @@ def calc_io_ratio(puzzle: om.Puzzle) -> tuple[int, int]:
     raise NotImplementedError
 
 
-# puzzle = puzzledb.get_test_puzzles[995]
-# find_atom_steps(puzzle.products[0], puzzle.reagents[0], {i:0 for i in range(6)})
-def find_atom_steps(product_molecule, reagent_molecule, pr_mapping):
-    all_steps = []
-    for p_i, p_atom in enumerate(product_molecule.atoms):
-        r_i = pr_mapping[p_i]
-        r_atom = reagent_molecule.atoms[r_i]
-        steps = []
-        if p_atom.type != r_atom.type:
-            steps.append("calcify")
-        p_bonds = [b for b in product_molecule.bonds
-            if p_atom.position in b.positions]
-        for p_bond in p_bonds:
-            other_p_atom_pos = [pos for pos in p_bond.positions
-                if pos != p_atom.position][0]
-            other_p_atom_i = [i for i, atom
-                in enumerate(product_molecule.atoms)
-                if atom.position == other_p_atom_pos][0]
-            steps.append("bond to %d" % other_p_atom_i)
-        all_steps.append(steps)
-    return all_steps
+def find_atom_steps(puzzle: om.Puzzle):
+    # assumes 1 reagent with 1 atom and 1 product for which every atom type
+    # has only one manufacture path
+    product = puzzle.products[0]
+    reagent = puzzle.reagents[0]
+    pr_mapping = {i: 0 for i in range(len(puzzle.products[0].atoms))}
+    return (
+            {
+                ("calcify", (p_i,))
+                for p_i, p_atom in enumerate(puzzle.products[0].atoms)
+                # assumes the only path is identity or calcification
+                if p_atom.type != reagent.atoms[pr_mapping[p_i]].type
+            } | {
+                # assume all bonds come from bonder
+                ("bond", (
+                    next((i for i, a in enumerate(product.atoms)
+                        if bond.positions[0] == a.position), None),
+                    next((i for i, a in enumerate(product.atoms)
+                        if bond.positions[1] == a.position), None)
+                )) for bond in product.bonds
+            }
+    )
+
+
+def generator_permutations(values, prefix=None):
+    if prefix is None:
+        prefix = []
+    if len(values) == 0:
+        yield tuple(prefix)
+    for val in values:
+        for x in generator_permutations(values - {val}, prefix + [val]):
+            yield x
+
+
+def find_calcifier_position_constraints(product: om.Molecule,
+        armlength: int = 1):
+    grab_pos = (armlength, 0)
+    pos_dict_i_dict_req_list = {}
+    for atom_grab_i in range(len(product.atoms)):
+        for rot in range(6):
+            rotated_product = product.copy().translate(
+                hexmath.difference(grab_pos,
+                    product.atoms[atom_grab_i].position)
+            ).rotate(grab_pos, rot)
+            collided_atoms_is = [i for i, atom in
+                enumerate(rotated_product.atoms)
+                if atom.position == (0, 0)]
+            atom_hextants = [hexmath.hextant(atom.position)
+                for atom in rotated_product.atoms]
+            modified_positions = [
+                hexmath.rotate(atom.position, -hextant)
+                if hextant is not None else None
+                for hextant, atom in zip(atom_hextants, rotated_product.atoms)
+            ]
+
+            for i, pos in enumerate(modified_positions):
+                if pos is not None and product.atoms[i].type == om.Atom.SALT:
+                    i_dict_req_list = pos_dict_i_dict_req_list.setdefault(
+                        pos, {})
+                    req_list = i_dict_req_list.setdefault(i, [])
+
+                    required_atoms = (list(range(atom_grab_i, i + 1))
+                                      if atom_grab_i <= i else
+                                      list(range(i, atom_grab_i + 1)))
+                    req_list.append({
+                        "req": required_atoms,
+                        "req_not": collided_atoms_is,
+                        "arm_rot": (-atom_hextants[i]) % 6,
+                        "molecule_rel_pivot": rot,
+                        "grabbed": atom_grab_i
+                    })
+
+    return pos_dict_i_dict_req_list
+
+
+def find_bonder_position_constraints():
+    return [
+        {
+            "position": hexmath.pos_from_direction(1, dir),
+            "rotation": (dir + 2) % 6,
+            "occupies": {hexmath.pos_from_direction(1, dir),
+                hexmath.pos_from_direction(1, dir + 1)}
+        }
+        for dir in range(6)
+    ]
+
+
+def find_reagent_positions():
+    return [
+        hexmath.pos_from_direction(1, dir)
+        for dir in range(6)
+    ]
+
+
+def find_solution(puzzle: om.Puzzle):
+    reagent_positions = find_reagent_positions()
+    reagent_position = reagent_positions[0]
+    bonder_constraints = find_bonder_position_constraints()
+    calcifier_constraints = find_calcifier_position_constraints(
+        puzzle.products[0])
+    salt_count = len([atom for atom in puzzle.products[0].atoms
+        if atom.type == om.Atom.SALT])
+    calcifier_positions = [
+        hexmath.rotate(calc_pos, rot)
+        for calc_pos, constraint in calcifier_constraints.items()
+        if len(constraint) == salt_count
+        for rot in range(6)
+    ]
+
+    arm_part = om.Part(name=om.Part.ARM1, position=(0, 0),
+        rotation=hexmath.direction_int(reagent_position),
+        length=1, arm_number=0)
+    reagent_part = om.Part(name=om.Part.INPUT,
+        position=reagent_position, rotation=0)
+    occupied = {arm_part.position, reagent_part.position}
+
+    for bonder_details in bonder_constraints:
+        if all(o not in occupied for o in bonder_details["occupies"]):
+            occupied1 = occupied | bonder_details["occupies"]
+            bonder_part = om.Part(name=om.Part.BONDER,
+                position=bonder_details["position"],
+                rotation=bonder_details["rotation"])
+            for calcifier_pos in calcifier_positions:
+                if calcifier_pos not in occupied1:
+                    # occupied2 = occupied1 | {calcifier_pos}
+                    calcifier_part = om.Part(name=om.Part.CALCIFICATION,
+                        position=calcifier_pos)
+                    parts = [arm_part, reagent_part, bonder_part,
+                        calcifier_part]
+                    start_frame = Frame(puzzle, parts=parts).iterate({})
+                    instructions, path_frames, cost = find_391_program(
+                        start_frame)
+                    if instructions:
+                        return create_solution(puzzle, "cost attempt",
+                            instructions, parts)
 
 
 ### SAVE AND RECORD ALL GENERATED SOLUTIONS ###
@@ -130,6 +244,8 @@ def omsim_record_save(puzzle, solution):
         sim_cost = solve_sim.metric("cost")
         sim_cycles = solve_sim.metric("cycles")
         sim_area = solve_sim.metric("area")
+        print("solution validated: cost=%d, cycles=%d, area=%d" % (
+            sim_cost, sim_cycles, sim_area))
         solution_filename = "%s_%dg_%dc_%da.solution" % (
             puzzle.name.decode("utf-8"), sim_cost, sim_cycles, sim_area)
         solution.write_to_path(puzzledb.OUTPUT_PATH / solution_filename)
@@ -336,41 +452,69 @@ def consistent_heuristic(frame: Frame) -> int:
     )
 
 
+def attach_instructions_to_solution(solution,
+        instructions_dict_list):
+    # reformat instructions from search into solution format
+    # add instructions to arm
+    for arm in solution.get_arm_parts():
+        arm.instructions = [
+            om.Instruction(i, frame_instrs[arm.arm_number])
+            if arm.arm_number in frame_instrs else
+            om.Instruction(i, om.Instruction.NOOP)
+            for i, frame_instrs in enumerate(instructions_dict_list)
+        ]
+
+
+def find_391_program(start_frame):
+    # instruction path to product output
+    output_instructions, output_frames, output_cost = start_frame.search(
+        goal_condition=lambda f: f.produced[0] >= 1,
+        heuristic=consistent_heuristic
+    )
+    # instruction path to reset
+    return_instructions, return_frames, return_cost = output_frames[-1].search(
+        goal_condition=lambda f: f.parts == start_frame.parts
+    )
+    return (output_instructions + return_instructions,
+    output_frames + return_frames, output_cost + return_cost)
+
+
+def create_solution(puzzle, solution_name, instructions, partlist):
+    # create and save solution
+    solution = om.Solution(
+        puzzle=puzzle.name,
+        name=bytes(solution_name, "utf-8"),
+        parts=partlist
+    )
+    # reformat instructions from search into solution format
+    attach_instructions_to_solution(solution, instructions)
+    return solution
+
+
+def save_solution(puzzle, solution):
+    # save solution
+    solution_filename = "%s_%s.solution" % (
+        puzzle.name.decode("utf-8"),
+        solution.name.decode("utf-8").replace(" ", "_"))
+    solution.write_to_path(puzzledb.SAVEDATA_PATH / solution_filename)
+    omsim_record_save(puzzle, solution)
+
+
 def main_create_cost_solve_391():
     # select puzzle
     puzzles = puzzledb.get_test_puzzles()
     puzzle = puzzles[391]
-
-    # create solution parameters
-    solution_name = "cost_prototype"
-
-    #   create solution object
-    solution = om.Solution(
-        puzzle=puzzle.name,
-        name=bytes(solution_name.replace("_", " "), "utf-8"),
-        parts=create_391_solve_partlist()
-    )
 
     # create initial start frame of the simulation
     start_frame = Frame(puzzle=puzzle, parts=create_391_solve_partlist())
     start_frame.iterate({})
 
     time_start = timer()
-    # instruction path to product output
-    output_instructions, output_frames, output_cost = start_frame.search(
-        goal_condition=lambda f: f.produced[0] >= 1,
-        heuristic=consistent_heuristic
-    )
-    time_midpoint = timer()
-    # instruction path to reset
-    return_instructions, return_frames, return_cost = output_frames[-1].search(
-        goal_condition=lambda f: f.parts == start_frame.parts
-    )
+    instructions, output_frames, cost = find_391_program(start_frame)
     time_end = timer()
 
-    print("output search duration=%.2f seconds" % (time_midpoint - time_start))
-    print("return search duration=%.2f seconds" % (time_end - time_midpoint))
-    print("cost = %d" % (output_cost + return_cost))
+    print("search duration=%.2f seconds" % (time_end - time_start))
+    print("cost = %d" % cost)
     print()
     print("heuristics:")
     for heuristic in [overfitted_heuristic, output_heuristic,
@@ -379,26 +523,9 @@ def main_create_cost_solve_391():
         print("    %r" % [heuristic(frame) + i
             for i, frame in enumerate([start_frame] + output_frames)])
 
-    # reformat instructions from search into solution format
-    arm_instrs = {
-        arm.arm_number: [
-            om.Instruction(i, frame_instrs[arm.arm_number])
-            for i, frame_instrs in
-            enumerate(output_instructions + return_instructions)
-            if arm.arm_number in frame_instrs
-        ]
-        for arm in start_frame.get_arm_parts()
-    }
-
-    # add instructions to arm
-    solution_arm = solution.parts[0]
-    solution_arm.instructions = arm_instrs[0]
-
-    # save solution
-    solution_filename = "%s_%s.solution" % (
-        puzzle.name.decode("utf-8"), solution_name)
-    solution.write_to_path(puzzledb.SAVEDATA_PATH / solution_filename)
-    omsim_record_save(puzzle, solution)
+    solution = create_solution(puzzle, "cost prototype", instructions,
+        start_frame.parts)
+    save_solution(puzzle, solution)
 
 
 def profile_code(func, name=None):
