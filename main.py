@@ -191,6 +191,31 @@ def find_reagent_positions():
     ]
 
 
+def find_output_positions(puzzle: om.Puzzle, armlength: int = 1):
+    output_constraints = []
+    for product in puzzle.products:
+        constraints = []
+        for arm_rot in range(6):
+            grab_pos = hexmath.pos_from_direction(armlength, arm_rot)
+            for atom_grab_i in range(len(product.atoms)):
+                for part_rot in range(6):
+                    rotated_product = product.copy().translate(
+                        hexmath.difference(grab_pos,
+                            product.atoms[atom_grab_i].position)
+                    ).rotate(grab_pos, part_rot)
+                    # skip orientations where they overlap the arm
+                    if all(atom.position != (0, 0) for atom in
+                            rotated_product.atoms):
+                        constraints.append({
+                            "position": rotated_product.atoms[0].position,
+                            "rotation": part_rot,
+                            "occupies": [atom.position
+                                for atom in rotated_product.atoms]
+                        })
+        output_constraints.append(constraints)
+    return output_constraints
+
+
 def find_solution(puzzle: om.Puzzle):
     reagent_positions = find_reagent_positions()
     reagent_position = reagent_positions[0]
@@ -221,17 +246,24 @@ def find_solution(puzzle: om.Puzzle):
                 rotation=bonder_details["rotation"])
             for calcifier_pos in calcifier_positions:
                 if calcifier_pos not in occupied1:
-                    # occupied2 = occupied1 | {calcifier_pos}
+                    occupied2 = occupied1 | {calcifier_pos}
                     calcifier_part = om.Part(name=om.Part.CALCIFICATION,
                         position=calcifier_pos)
-                    parts = [arm_part, reagent_part, bonder_part,
-                        calcifier_part]
-                    start_frame = Frame(puzzle, parts=parts).iterate({})
-                    instructions, path_frames, cost = find_391_program(
-                        start_frame)
-                    if instructions:
-                        return create_solution(puzzle, "cost attempt",
-                            instructions, parts)
+                    for output_constraints in find_output_positions(puzzle)[0]:
+                        if all(o not in occupied2
+                                for o in output_constraints["occupies"]):
+                            product_part = om.Part(name=om.Part.OUTPUT_STANDARD,
+                                position=output_constraints["position"],
+                                rotation=output_constraints["rotation"])
+                            parts = [arm_part, reagent_part, bonder_part,
+                                calcifier_part, product_part]
+                            start_frame = Frame(puzzle, parts=parts).iterate({})
+                            instructions, path_frames, cost = find_391_program(
+                                start_frame, consistent_heuristic_generator(
+                                    puzzle, parts))
+                            if instructions:
+                                return create_solution(puzzle, "cost attempt",
+                                    instructions, parts)
 
 
 ### SAVE AND RECORD ALL GENERATED SOLUTIONS ###
@@ -297,79 +329,6 @@ def create_391_solve_partlist():
 
 def rotate_diff(x: int, y: int) -> int:
     return abs((y - x + 3) % 6 - 3)
-
-
-def dist_from_new_atom(frame: Frame, e: Evaluator = None) -> int:
-    e = e or Evaluator(frame)
-    if e.atoms() >= 5:
-        return 0
-
-    # making an atom takes 3 cycles each (4- to offset wip atom)
-    cost = 3 * max(0, 4 - e.atoms())
-
-    arm = frame.get_arm_parts()[0]
-    distance = rotate_diff(0, arm.rotation)
-    # the distance is always a part of the cost for new atoms
-    # but the distance can overlap with other tasks, like calc or bond
-    # reduce addition to the cost by 1 for each of those unfinished
-    # categories.
-    # only care about reduction if the arm is grabbing
-    """
-    if arm.grabbing and arm.grabbed[0]:
-        reduction = (e.atom_count_type(om.Atom.SALT < 3)) + (e.bonds() < 3)
-        cost += max(0, distance - reduction)
-    else:
-        cost += distance
-    """
-
-    cost += (distance > 0)
-
-    # whether the arm is grabbing or not determines whether a drop is
-    # necessary or if a grab is necessary
-    if distance == 0:
-        if arm.grabbing:
-            # ensure it's actually grabbed
-            # grabbing an atom on top of the input means we have it
-            # not grabbed means drop and then grab
-            if not arm.grabbed[0]:
-                cost += 2
-        else:
-            # still need to grab
-            cost += 1
-    else:
-        if arm.grabbing:
-            # grabbing a different atom means drop, move dist, grab
-            cost += 2
-        else:
-            # not grabbing means move dist, grab
-            cost += 1
-
-    return cost
-
-
-def bond_cost(frame: Frame = None, e: Evaluator = None) -> int:
-    e = e or Evaluator(frame)
-    cost = max(0, 3 - e.bonds())
-    return max(cost, 0)
-
-
-def salt_cost(frame: Frame = None, e: Evaluator = None) -> int:
-    e = e or Evaluator(frame)
-    cost = max(0, 3 - e.atom_count_type(om.Atom.SALT))
-    return cost
-
-
-def output_dist(frame: Frame, e: Evaluator = None) -> int:
-    e = e or Evaluator(frame)
-    if (e.atoms() == 5 and e.atom_count_type(om.Atom.SALT) == 3 and
-            e.bonds() == 3):
-        arm = frame.get_arm_parts()[0]
-        cost = 1  # for the final drop
-        if arm.rotation != 3:
-            cost += 1
-        return cost
-    else:
-        return 2
 
 
 def bond_punish_cost(frame: Frame = None, e: Evaluator = None) -> int:
@@ -439,17 +398,113 @@ def output_heuristic(frame: Frame) -> int:
     )
 
 
-def consistent_heuristic(frame: Frame) -> int:
-    if frame.produced[0] > 0:
-        return 0
-    e = Evaluator(frame)
-    return (
-            max(salt_cost(e=e), bond_cost(frame, e))
-            + dist_from_new_atom(frame, e)
-            + bond_punish_cost(e=e)
-            + output_dist(frame, e)
-            + punish_bad_angles(frame, e)
-    )
+def consistent_heuristic_generator(puzzle: om.Puzzle, parts):
+    product = puzzle.products[0]
+    salts = len([a for a in product.atoms if a.type == om.Atom.SALT])
+    bonds = len(product.bonds)
+    atoms = len(product.atoms)
+
+    reagent_part = next(p for p in parts if p.name == om.Part.INPUT)
+    arm_part = next(p for p in parts if p.name in om.Part.PARTS_PROGRAMMABLE)
+    product_part = next(p for p in parts if p.name == om.Part.OUTPUT_STANDARD)
+
+    reagent_dir = hexmath.direction_int(hexmath.difference(
+        reagent_part.position, arm_part.position))
+    product_dirs = [
+        hexmath.direction_int(difference)
+        for difference in [
+            hexmath.difference(
+                hexmath.translate(atom.position, product_part.position,
+                    product_part.rotation),
+                arm_part.position)
+            for atom in product.atoms
+        ]
+        if hexmath.cab_distance(difference) == 1
+    ]
+
+    def bond_cost(frame: Frame = None, e: Evaluator = None) -> int:
+        e = e or Evaluator(frame)
+        cost = max(0, bonds - e.bonds())
+        return max(cost, 0)
+
+    def salt_cost(frame: Frame = None, e: Evaluator = None) -> int:
+        e = e or Evaluator(frame)
+        cost = max(0, salts - e.atom_count_type(om.Atom.SALT))
+        return cost
+
+    def dist_from_new_atom(frame: Frame, e: Evaluator = None) -> int:
+        e = e or Evaluator(frame)
+        if e.atoms() >= atoms + 1:
+            return 0
+
+        # making an atom takes 3 cycles each (4- to offset wip atom)
+        cost = 3 * max(0, atoms - e.atoms())
+
+        arm = frame.get_arm_parts()[0]
+        distance = rotate_diff(reagent_dir, arm.rotation)
+        # the distance is always a part of the cost for new atoms
+        # but the distance can overlap with other tasks, like calc or bond
+        # reduce addition to the cost by 1 for each of those unfinished
+        # categories.
+        # only care about reduction if the arm is grabbing
+        """
+        if arm.grabbing and arm.grabbed[0]:
+            reduction = (e.atom_count_type(om.Atom.SALT < 3)) + (e.bonds() < 3)
+            cost += max(0, distance - reduction)
+        else:
+            cost += distance
+        """
+
+        cost += (distance > 0)
+
+        # whether the arm is grabbing or not determines whether a drop is
+        # necessary or if a grab is necessary
+        if distance == 0:
+            if arm.grabbing:
+                # ensure it's actually grabbed
+                # grabbing an atom on top of the input means we have it
+                # not grabbed means drop and then grab
+                if not arm.grabbed[0]:
+                    cost += 2
+            else:
+                # still need to grab
+                cost += 1
+        else:
+            if arm.grabbing:
+                # grabbing a different atom means drop, move dist, grab
+                cost += 2
+            else:
+                # not grabbing means move dist, grab
+                cost += 1
+
+        return cost
+
+    def output_dist(frame: Frame, e: Evaluator = None) -> int:
+        e = e or Evaluator(frame)
+        if (e.atoms() == (atoms + 1)
+                and e.atom_count_type(om.Atom.SALT) == salts
+                and e.bonds() == bonds):
+            arm = frame.get_arm_parts()[0]
+            cost = 1  # for the final drop
+            if arm.rotation not in product_dirs:
+                cost += 1
+            return cost
+        else:
+            return 2
+
+    def consistent_heuristic(frame: Frame) -> int:
+        if frame.produced[0] > 0:
+            return 0
+        e = Evaluator(frame)
+        return (
+                max(salt_cost(e=e), bond_cost(frame, e))
+                + dist_from_new_atom(frame, e)
+                + bond_punish_cost(e=e)
+                + output_dist(frame, e)
+                + punish_bad_angles(frame, e)
+        )
+
+    return consistent_heuristic
 
 
 def attach_instructions_to_solution(solution,
@@ -465,11 +520,11 @@ def attach_instructions_to_solution(solution,
         ]
 
 
-def find_391_program(start_frame):
+def find_391_program(start_frame, heuristic):
     # instruction path to product output
     output_instructions, output_frames, output_cost = start_frame.search(
         goal_condition=lambda f: f.produced[0] >= 1,
-        heuristic=consistent_heuristic
+        heuristic=heuristic
     )
     # instruction path to reset
     return_instructions, return_frames, return_cost = output_frames[-1].search(
@@ -505,12 +560,16 @@ def main_create_cost_solve_391():
     puzzles = puzzledb.get_test_puzzles()
     puzzle = puzzles[391]
 
+    parts = create_391_solve_partlist()
+    consistent_heuristic = consistent_heuristic_generator(puzzle, parts)
+
     # create initial start frame of the simulation
-    start_frame = Frame(puzzle=puzzle, parts=create_391_solve_partlist())
+    start_frame = Frame(puzzle=puzzle, parts=parts)
     start_frame.iterate({})
 
     time_start = timer()
-    instructions, output_frames, cost = find_391_program(start_frame)
+    instructions, output_frames, cost = find_391_program(start_frame,
+        consistent_heuristic)
     time_end = timer()
 
     print("search duration=%.2f seconds" % (time_end - time_start))
