@@ -519,6 +519,13 @@ class Molecule:
         return any(centered_other_copy == rotated_copy
             for rotated_copy in rotated_copies)
 
+    def angle_agnostic(self):
+        rotated_copies = [
+            self.copy().rotate((0, 0), rot).translate_center()
+            for rot in range(6)
+        ]
+        return min(rotated_copies)
+
     def symmetry_angle(self):
         centered_copy = self.translate_center()
         rotated_copies = [
@@ -568,6 +575,24 @@ class Molecule:
                 and set(self.atoms) == set(other.atoms)
                 and set(self.bonds) == set(other.bonds)
         )
+
+    def __lt__(self, other):
+        assert isinstance(other, Molecule)
+        if len(self.atoms) != len(other.atoms):
+            return len(self.atoms) < len(other.atoms)
+        if len(self.bonds) != len(other.bonds):
+            return len(self.bonds) < len(other.bonds)
+        s_atoms_sorted = sorted(self.atoms, key=lambda atom: atom.position)
+        o_atoms_sorted = sorted(other.atoms, key=lambda atom: atom.position)
+        for s_atom, o_atom in zip(s_atoms_sorted, o_atoms_sorted):
+            if s_atom != o_atom:
+                return s_atom < o_atom
+        s_bonds_sorted = sorted(self.bonds, key=lambda bond: bond.positions)
+        o_bonds_sorted = sorted(other.bonds, key=lambda bond: bond.positions)
+        for s_bond, o_bond in zip(s_bonds_sorted, o_bonds_sorted):
+            if s_bond != o_bond:
+                return s_bond < o_bond
+        return False
 
     def __hash__(self):
         if self._hash is None:
@@ -648,6 +673,10 @@ class Atom:
             return False
         return self.type == other.type and self.position == other.position
 
+    def __lt__(self, other):
+        assert isinstance(other, Atom)
+        return (self.type, self.position) < (other.type, other.position)
+
     def __hash__(self):
         if self._hash is None:
             self._hash = hash((self.type, self.position))
@@ -722,6 +751,10 @@ class Bond:
             return False
         return (self.type == other.type
                 and self.positions == other.positions)
+
+    def __lt__(self, other):
+        assert isinstance(other, Bond)
+        return (self.type, self.positions) < (other.type, other.positions)
 
     def __hash__(self):
         if self._hash is None:
