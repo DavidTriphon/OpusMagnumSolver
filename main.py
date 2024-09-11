@@ -97,40 +97,6 @@ def calc_io_ratio(puzzle: om.Puzzle) -> tuple[int, int]:
     raise NotImplementedError
 
 
-def find_atom_steps(puzzle: om.Puzzle):
-    # assumes 1 reagent with 1 atom and 1 product for which every atom type
-    # has only one manufacture path
-    product = puzzle.products[0]
-    reagent = puzzle.reagents[0]
-    pr_mapping = {i: 0 for i in range(len(puzzle.products[0].atoms))}
-    return (
-            {
-                ("calcify", (p_i,))
-                for p_i, p_atom in enumerate(puzzle.products[0].atoms)
-                # assumes the only path is identity or calcification
-                if p_atom.type != reagent.atoms[pr_mapping[p_i]].type
-            } | {
-                # assume all bonds come from bonder
-                ("bond", (
-                    next((i for i, a in enumerate(product.atoms)
-                        if bond.positions[0] == a.position), None),
-                    next((i for i, a in enumerate(product.atoms)
-                        if bond.positions[1] == a.position), None)
-                )) for bond in product.bonds
-            }
-    )
-
-
-def generator_permutations(values, prefix=None):
-    if prefix is None:
-        prefix = []
-    if len(values) == 0:
-        yield tuple(prefix)
-    for val in values:
-        for x in generator_permutations(values - {val}, prefix + [val]):
-            yield x
-
-
 def find_calcifier_position_constraints(product: om.Molecule,
         armlength: int = 1):
     grab_pos = (armlength, 0)
