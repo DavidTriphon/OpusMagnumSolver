@@ -182,7 +182,7 @@ def find_output_positions(puzzle: om.Puzzle, armlength: int = 1):
     return output_constraints
 
 
-def find_solution(puzzle: om.Puzzle):
+def partlist_generator(puzzle: om.Puzzle):
     reagent_positions = find_reagent_positions()
     reagent_position = reagent_positions[0]
     bonder_constraints = find_bonder_position_constraints()
@@ -223,13 +223,18 @@ def find_solution(puzzle: om.Puzzle):
                                 rotation=output_constraints["rotation"])
                             parts = [arm_part, reagent_part, bonder_part,
                                 calcifier_part, product_part]
-                            start_frame = Frame(puzzle, parts=parts).iterate({})
-                            instructions, path_frames, cost = find_391_program(
-                                start_frame, consistent_heuristic_generator(
-                                    puzzle, parts))
-                            if instructions:
-                                return create_solution(puzzle, "cost attempt",
-                                    instructions, parts)
+                            yield parts
+
+
+def find_solution(puzzle: om.Puzzle):
+    for parts in partlist_generator(puzzle):
+        start_frame = Frame(puzzle, parts=parts).iterate({})
+        instructions, path_frames, cost = find_391_program(
+            start_frame, consistent_heuristic_generator(
+                puzzle, parts))
+        if instructions:
+            return create_solution(puzzle, "cost attempt",
+                instructions, parts)
 
 
 ### SAVE AND RECORD ALL GENERATED SOLUTIONS ###
