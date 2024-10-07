@@ -1,0 +1,41 @@
+stage 1A.
+- is a bonder necessary?
+	all reagents are smaller than the product?
+- is a bonder unnecessary?
+	all products are 1 atom?
+- is a debonder necessary?
+	all reagents are larger than the product?
+- is a debonder unnecessary?
+	all reagents are 1 atom?
+
+stage 1B.
+    identify product atom types that must be produced.
+
+    list available glyphs and inputs that create these types for each.
+    do any of these atom types only have 1 part that creates them?
+        if only 1 part creates them, that part is necessary
+        is there only 1 recipe that produces that type using this part?
+            if only 1 recipe is compatible, its inputs must be satisfied too,
+            without looping back to the previous type.
+
+            if there are multiple compatible recipes, at least one of those
+            recipes inputs must all be satisfied for. (the only case for this is
+             calcification)
+
+        if there are multiple parts that can satisfy this type, ambiguity should
+        be left.
+
+stage 1C.
+    if bonder is not constrained or debonder is not constrained
+    reconsider bonder and debonders again, using constrained knowledge from step
+    2.
+
+    ex. Gold is constrained to a projection recipe, which requires quicksilver
+    and Silver.
+
+    quicksilver is a single atom product for operating the projector glyph.
+    That means a quicksilver atom must be debonded until it has no bonds so that
+    it can be used as an input to the projection. If all quicksilver atoms are
+    bonded, then a debonder is necessary. If any QS is not bonded in an input,
+    it can be used and a debonder is not necessary.
+

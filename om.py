@@ -497,11 +497,20 @@ class Molecule:
         self._hash = None
         return self
 
-    def rotate(self, pivot_pos: Pos2D, rotation: Angle):
+    def move_atom_to(self, position: Pos2D, atom_i: int = 0):
+        position = hexmath.difference(position, self.atoms[atom_i].position)
         for atom in self.atoms:
-            atom.rotate(pivot_pos, rotation)
+            atom.translate(position)
         for bond in self.bonds:
-            bond.rotate(pivot_pos, rotation)
+            bond.translate(position)
+        self._hash = None
+        return self
+
+    def rotate(self, rotation: Angle, pivot_pos: Pos2D = (0, 0)):
+        for atom in self.atoms:
+            atom.rotate(rotation, pivot_pos)
+        for bond in self.bonds:
+            bond.rotate(rotation, pivot_pos)
         self._hash = None
         return self
 
@@ -512,7 +521,7 @@ class Molecule:
 
     def matches(self, other):
         rotated_copies = [
-            self.copy().rotate((0, 0), rot).translate_center()
+            self.copy().rotate(rot).translate_center()
             for rot in range(6)
         ]
         centered_other_copy = other.copy().translate_center()
@@ -521,7 +530,7 @@ class Molecule:
 
     def angle_agnostic(self):
         rotated_copies = [
-            self.copy().rotate((0, 0), rot).translate_center()
+            self.copy().rotate(rot).translate_center()
             for rot in range(6)
         ]
         return min(rotated_copies)
@@ -529,7 +538,7 @@ class Molecule:
     def symmetry_angle(self):
         centered_copy = self.translate_center()
         rotated_copies = [
-            self.copy().rotate((0, 0), rot).translate_center()
+            self.copy().rotate(rot).translate_center()
             for rot in range(6)
         ]
         equalities = [centered_copy == rot_copy for rot_copy in rotated_copies]
@@ -568,6 +577,37 @@ class Molecule:
             )
         # check for overlap
         return any(atom.position in space_s for atom in self.atoms)
+
+    def find_disconnected(self):
+        linked_atoms = {
+            atom.position: {atom}
+            for atom in self.atoms
+        }
+        for bond in self.bonds:
+            pos0 = bond.positions[0]
+            pos1 = bond.positions[1]
+            union = linked_atoms[pos0] | linked_atoms[pos1]
+            for atom in union:
+                linked_atoms[atom.position] = union
+        groups = set(frozenset(group) for group in linked_atoms.values())
+        if len(groups) == 1:
+            return [self]
+        molecules = [
+            Molecule(
+                atoms=list(group),
+                bonds=[
+                    bond for bond in self.bonds
+                    if any(atom.position in bond.positions for atom in group)
+                ]
+            )
+            for group in groups
+        ]
+        assert sum(len(molecule.bonds) for molecule in molecules) == len(
+            self.bonds)
+        assert sum(len(molecule.atoms) for molecule in molecules) == len(
+            self.atoms)
+
+        return molecules
 
     def __eq__(self, other):
         return (
@@ -644,7 +684,7 @@ class Atom:
         QUINTESSENCE: "QUINTESSENCE",
     }
 
-    TYPES = list(range(1, 17))
+    TYPES = list(range(1, 15)) + [16]  # skip repetition symbol
     TYPES_ELEMENTAL = {AIR, EARTH, FIRE, WATER}
     TYPES_METAL = {LEAD, TIN, IRON, COPPER, SILVER, GOLD}
 
@@ -664,7 +704,7 @@ class Atom:
         self.position = hexmath.translate(self.position, position, rotation)
         self._hash = None
 
-    def rotate(self, pivot: Pos2D, rotation: Angle):
+    def rotate(self, rotation: Angle, pivot: Pos2D = (0, 0)):
         self.position = hexmath.rotate(self.position, rotation, pivot)
         self._hash = None
 
@@ -695,6 +735,7 @@ class Bond:
     TRIPLEX_BLACK = 1 << 2
     TRIPLEX_YELLOW = 1 << 3
     TRIPLEX = TRIPLEX_RED | TRIPLEX_BLACK | TRIPLEX_YELLOW
+    TYPES = {NORMAL, TRIPLEX}
 
     @staticmethod
     def type_name(bond_type):
@@ -739,12 +780,18 @@ class Bond:
         )))
         self._hash = None
 
-    def rotate(self, pivot: Pos2D, rotation: Angle):
+    def rotate(self, rotation: Angle, pivot: Pos2D = (0, 0)):
         self.positions = tuple(sorted((
             hexmath.rotate(self.positions[0], rotation, pivot),
             hexmath.rotate(self.positions[1], rotation, pivot)
         )))
         self._hash = None
+
+    def other(self, position):
+        if self.positions[0] == position:
+            return self.positions[1]
+        else:
+            return self.positions[0]
 
     def __eq__(self, other):
         if not isinstance(other, Bond):
@@ -922,7 +969,6 @@ class Solution:
             key=lambda part: part.arm_number
         )
 
-
     def encode(self, encoder):
         encoder.write_struct_format('<I', 7)
         encoder.write_string(self.puzzle)
@@ -981,6 +1027,9 @@ class Part:
     PARTS_CONSUMERS = {PROJECTION, PURIFICATION, UNIFICATION, DISPERSION,
         ANIMISMUS, DISPOSAL, OUTPUT_STANDARD, CONDUIT}
     PARTS_OUTPUTS = {OUTPUT_STANDARD, OUTPUT_REPEATING}
+    PARTS_GLYPHS = {CALCIFICATION, DISPERSION, DUPLICATION, ANIMISMUS,
+        PROJECTION, PURIFICATION, UNIFICATION, BERLO, DISPOSAL}
+    PARTS_BONDS = {BONDER, UNBONDER, MULTIBONDER, TRIPLEX}
 
     COSTS = {
         ARM1: 20,
@@ -1113,7 +1162,6 @@ class Part:
                 Part.OUTPUT_REPEATING: 1,
             }
             return d[type]
-
 
     # tick part evaluation order:
     # 1. grabs/drops

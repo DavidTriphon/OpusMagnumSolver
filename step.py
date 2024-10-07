@@ -3,12 +3,10 @@ import puzzledb
 
 
 def step_preconditions(step):
-    if step[0] == "r":
-        return []
     if step[0] == "c":
-        return ["r" + step[1]]
+        return []
     if step[0] == "b":
-        return ["r" + step[1], "r" + step[2]]
+        return []
 
 
 def available(chosen, steps):
@@ -38,6 +36,10 @@ def step_order_generator(steps, prefix=None):
             yield p
 
 
+def moves_from_steps(all_steps):
+    return [(int(i), s) for s in all_steps for i in s[1:]]
+
+
 def find_puzzle_steps(puzzle: om.Puzzle):
     # assumes 1 reagent with 1 atom and 1 product for which every atom type
     # has only one manufacture path
@@ -57,9 +59,6 @@ def find_puzzle_steps(puzzle: om.Puzzle):
         for p_i, p_atom in enumerate(puzzle.products[0].atoms)
         # assumes the only path is identity or calcification
         if p_atom.type != reagent.atoms[pr_mapping[p_i]].type
-    ] + [
-        "r%d" % p_i
-        for p_i, p_atom in enumerate(puzzle.products[0].atoms)
     ]
 
 

@@ -6,11 +6,11 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 import hexmath
+import orientation
 from frame import Frame
 import puzzledb
 import display
 import om
-
 
 ### TEST API FOR OM ###
 
@@ -106,7 +106,7 @@ def find_calcifier_position_constraints(product: om.Molecule,
             rotated_product = product.copy().translate(
                 hexmath.difference(grab_pos,
                     product.atoms[atom_grab_i].position)
-            ).rotate(grab_pos, rot)
+            ).rotate(rot, grab_pos)
             collided_atoms_is = [i for i, atom in
                 enumerate(rotated_product.atoms)
                 if atom.position == (0, 0)]
@@ -138,54 +138,11 @@ def find_calcifier_position_constraints(product: om.Molecule,
     return pos_dict_i_dict_req_list
 
 
-def find_bonder_position_constraints():
-    return [
-        {
-            "position": hexmath.pos_from_direction(1, dir),
-            "rotation": (dir + 2) % 6,
-            "occupies": {hexmath.pos_from_direction(1, dir),
-                hexmath.pos_from_direction(1, dir + 1)}
-        }
-        for dir in range(6)
-    ]
-
-
-def find_reagent_positions():
-    return [
-        hexmath.pos_from_direction(1, dir)
-        for dir in range(6)
-    ]
-
-
-def find_output_positions(puzzle: om.Puzzle, armlength: int = 1):
-    output_constraints = []
-    for product in puzzle.products:
-        constraints = []
-        for arm_rot in range(6):
-            grab_pos = hexmath.pos_from_direction(armlength, arm_rot)
-            for atom_grab_i in range(len(product.atoms)):
-                for part_rot in range(6):
-                    rotated_product = product.copy().translate(
-                        hexmath.difference(grab_pos,
-                            product.atoms[atom_grab_i].position)
-                    ).rotate(grab_pos, part_rot)
-                    # skip orientations where they overlap the arm
-                    if all(atom.position != (0, 0) for atom in
-                            rotated_product.atoms):
-                        constraints.append({
-                            "position": rotated_product.atoms[0].position,
-                            "rotation": part_rot,
-                            "occupies": [atom.position
-                                for atom in rotated_product.atoms]
-                        })
-        output_constraints.append(constraints)
-    return output_constraints
-
-
 def partlist_generator(puzzle: om.Puzzle):
-    reagent_positions = find_reagent_positions()
+    reagent_positions = orientation.find_molecule_orientations(puzzle.reagents[
+        0], "r0")
     reagent_position = reagent_positions[0]
-    bonder_constraints = find_bonder_position_constraints()
+    bonder_constraints = orientation.adjacent_bonder_orientations()
     calcifier_constraints = find_calcifier_position_constraints(
         puzzle.products[0])
     salt_count = len([atom for atom in puzzle.products[0].atoms
@@ -215,7 +172,8 @@ def partlist_generator(puzzle: om.Puzzle):
                     occupied2 = occupied1 | {calcifier_pos}
                     calcifier_part = om.Part(name=om.Part.CALCIFICATION,
                         position=calcifier_pos)
-                    for output_constraints in find_output_positions(puzzle)[0]:
+                    for output_constraints in orientation.find_molecule_orientations(
+                            puzzle.products[0], "p0"):
                         if all(o not in occupied2
                                 for o in output_constraints["occupies"]):
                             product_part = om.Part(name=om.Part.OUTPUT_STANDARD,

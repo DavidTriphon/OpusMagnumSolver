@@ -1,6 +1,7 @@
 import puzzledb
 import om
 import math
+import z3
 
 
 def analyze_step1(puzzle):
@@ -210,8 +211,7 @@ def solve_step_counts(puzzle, n=100):
     ]
 
 
-def find_n_solves(variables, solver, n=100):
-    import z3
+def find_n_solves(variables, solver: z3.Solver, n=100):
     results_table = []
     while solver.check() == z3.sat and len(results_table) < n:
         m = solver.model()
@@ -239,9 +239,9 @@ def find_n_solves(variables, solver, n=100):
 def main_part_solve():
     from timeit import default_timer as timer
 
-    puzzles = puzzledb.get_test_puzzles()
+    puzzle = puzzledb.get_test_puzzles()[128]
     start = timer()
-    analyze_step1(puzzles[976])
+    analyze_step1(puzzle)
     end = timer()
     print("duration: %.2f secs" % (end - start))
 

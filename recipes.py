@@ -7,15 +7,22 @@ import om
 class Recipe:
 
     def __init__(self, part: bytes,
+            molecule_index: int = None,
             consumed: list[int] = None,
             produced: list[int] = None,
             conversions: list[tuple[int, int]] = None,
-            hovers: list[int] = None):
+            hovers: list[int] = None,
+            bonds_consumed: list[int] = None,
+            bonds_produced: list[int] = None,
+    ):
         self.part: bytes = part
+        self.molecule_index: int = molecule_index
         self.consumed: list[int] = consumed or []
         self.produced: list[int] = produced or []
         self.conversions: list[tuple[int, int]] = conversions or []
         self.hovers: list[int] = hovers or []
+        self.bonds_consumed: list[int] = bonds_consumed or []
+        self.bonds_produced: list[int] = bonds_produced or []
 
     def creates(self, element):
         return (element in self.produced or
@@ -32,10 +39,44 @@ class Recipe:
     def list_required(self):
         return self.consumed + list(c for c, _ in self.conversions)
 
+    def get(self, is_mass, is_consumed):
+        if is_mass:
+            if is_consumed:
+                return self.consumed
+            else:
+                return self.produced
+        else:
+            if is_consumed:
+                return self.bonds_consumed
+            else:
+                return self.bonds_produced
+
+    def shorthand_str(self):
+        if self.part == om.Part.CALCIFICATION:
+            return "calc(%s)" % om.Atom.TYPE_NAMES[self.conversions[0][0]]
+        if self.part == om.Part.DUPLICATION:
+            return "dupe(%s)" % om.Atom.TYPE_NAMES[self.conversions[0][1]]
+        if self.part == om.Part.PURIFICATION:
+            return "purf(%s)" % om.Atom.TYPE_NAMES[self.consumed[0]]
+        if self.part == om.Part.PROJECTION:
+            return "proj(%s)" % om.Atom.TYPE_NAMES[self.conversions[0][0]]
+        if self.part == om.Part.ANIMISMUS:
+            return "animismus"
+        if self.part == om.Part.DISPERSION:
+            return "dispersion"
+        if self.part == om.Part.UNIFICATION:
+            return "unification"
+        return str(self)
+
     def __str__(self):
         str_list = []
 
-        part_str = self.part[6:].decode("UTF-8")
+        if self.part[:6] == b"glyph-":
+            part_str = self.part[6:].decode("UTF-8")
+        else:
+            part_str = self.part.decode("UTF-8")
+        if self.molecule_index is not None:
+            part_str += "[%d]" % self.molecule_index
 
         if self.hovers:
             hovr_str = '(' + ", ".join([om.Atom.TYPE_NAMES[e] for e in
@@ -54,7 +95,7 @@ class Recipe:
             elif len(self.produced) > 0:
                 comb_str = "+" + prod_str
             elif len(self.consumed) > 0:
-                comb_str = "-" + cons_str
+                comb_str = "-(%s)" % cons_str
             str_list.append(comb_str)
 
         str_list += [
@@ -75,8 +116,11 @@ class Recipe:
         return "Recipe(%s, %s)" % (self.part, val_str)
 
     def __hash__(self):
-        return hash((self.part, tuple(self.produced), tuple(self.consumed),
-        tuple(self.conversions), tuple(self.hovers)))
+        return hash((
+            self.part, self.molecule_index,
+            tuple(self.produced), tuple(self.consumed),
+            tuple(self.conversions), tuple(self.hovers)
+        ))
 
     def __eq__(self, other):
         return (self.part == other.part
@@ -87,27 +131,51 @@ class Recipe:
 
 
 def recipe_calcify(element: int):
-    return Recipe(om.Part.CALCIFICATION,
+    return Recipe(part=om.Part.CALCIFICATION,
         conversions=[(element, om.Atom.SALT)])
 
 
 def recipe_duplicate(element: int):
-    return Recipe(om.Part.DUPLICATION,
+    return Recipe(part=om.Part.DUPLICATION,
         conversions=[(om.Atom.SALT, element)], hovers=[element])
 
 
 def recipe_purify(metal: int, metal_up: int):
-    return Recipe(om.Part.PURIFICATION,
+    return Recipe(part=om.Part.PURIFICATION,
         consumed=[metal, metal], produced=[metal_up])
 
 
 def recipe_project(metal: int, metal_up: int):
-    return Recipe(om.Part.PROJECTION,
+    return Recipe(part=om.Part.PROJECTION,
         consumed=[om.Atom.QUICKSILVER], conversions=[(metal, metal_up)])
 
 
-def recipe_reagent(type):
-    return Recipe(om.Part.INPUT, produced=[type])
+def recipe_reagent(molecule: om.Molecule, molecule_index: int = None):
+    return Recipe(part=om.Part.INPUT, molecule_index=molecule_index,
+        produced=[atom.type for atom in molecule.atoms],
+        bonds_produced=[bond.type for bond in molecule.bonds]
+    )
+
+
+def puzzles_reagent_recipes(puzzle):
+    return [recipe_reagent(reagent, i) for i, reagent in enumerate(
+        puzzle.reagents)]
+
+
+def recipe_product(molecule: om.Molecule, molecule_index: int = None):
+    return Recipe(part=om.Part.OUTPUT_STANDARD, molecule_index=molecule_index,
+        consumed=[atom.type for atom in molecule.atoms],
+        bonds_consumed=[bond.type for bond in molecule.bonds]
+    )
+
+
+def puzzles_product_recipes(puzzle):
+    return [recipe_product(product, i) for i, product in enumerate(
+        puzzle.products)]
+
+
+def recipe_disposal(atom_type: int):
+    return Recipe(part=om.Part.DISPOSAL, consumed=[atom_type])
 
 
 RECIPES: list[Recipe] = [
@@ -141,27 +209,48 @@ RECIPES: list[Recipe] = [
     recipe_project(om.Atom.IRON, om.Atom.COPPER),
     recipe_project(om.Atom.COPPER, om.Atom.SILVER),
     recipe_project(om.Atom.SILVER, om.Atom.GOLD),
+
+    # # etc
+    # disposal
+    *[recipe_disposal(atom_type) for atom_type in om.Atom.TYPES],
+
+    # BOND RECIPES
+    Recipe(part=om.Part.BONDER, bonds_produced=[om.Bond.NORMAL]),
+    Recipe(part=om.Part.UNBONDER, bonds_consumed=[om.Bond.NORMAL]),
+    Recipe(part=om.Part.TRIPLEX, bonds_produced=[om.Bond.TRIPLEX]),
 ]
 
-glyph_parts = set(recipe.part for recipe in RECIPES) | {om.Part.BERLO}
-Node = tuple[bytes]
+
+def part_recipes(parts) -> list[Recipe]:
+    return [r for r in RECIPES if r.part in parts]
 
 
-def neighbors(selected=(), available=None) -> list[Node]:
-    if available is None:
-        available = glyph_parts
-    else:
-        available = [a for a in available if a in glyph_parts]
-
-    nbs = []
-    for part in available:
-        if part not in selected:
-            partlist = tuple(list(selected) + [part])
-            nbs.append(partlist)
-    return nbs
+def usable_recipes(given_types, parts) -> list[Recipe]:
+    maximum_types = expand_possible_types(given_types, parts)
+    available_recipes = part_recipes(parts)
+    return [
+        recipe for recipe in available_recipes
+        if all(req in maximum_types for req in recipe.list_required())
+    ]
 
 
 def search_cheapest_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
+    glyph_parts = set(recipe.part for recipe in RECIPES) | {om.Part.BERLO}
+    Node: type = tuple[bytes]
+
+    def neighbors(selected=(), available=None) -> list[Node]:
+        if available is None:
+            available = glyph_parts
+        else:
+            available = [a for a in available if a in glyph_parts]
+
+        nbs = []
+        for part in available:
+            if part not in selected:
+                partlist = tuple(list(selected) + [part])
+                nbs.append(partlist)
+        return nbs
+
     product_types = puzzle.product_types()
     reagent_types = puzzle.reagent_types()
     available_parts = puzzle.full_parts_list()
@@ -190,7 +279,8 @@ def search_cheapest_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
     return None
 
 
-def expand_possible_types(types: list[int], available_parts: Node = None):
+def expand_possible_types(types: list[int],
+        available_parts: tuple[bytes] = None):
     if available_parts is None:
         available_parts = ()
 
@@ -198,8 +288,7 @@ def expand_possible_types(types: list[int], available_parts: Node = None):
     typelist = types.copy()
     type_checklist = types.copy()
 
-    available_recipes = [r for r in RECIPES
-        if r.part in available_parts]
+    available_recipes = part_recipes(available_parts)
 
     if om.Part.BERLO in available_parts:
         hovering_types = om.Atom.TYPES_ELEMENTAL
@@ -224,20 +313,14 @@ def expand_possible_types(types: list[int], available_parts: Node = None):
 def search_required_partlist(puzzle: om.Puzzle) -> list[bytes] | None:
     required_parts = []
     available_parts = puzzle.full_parts_list()
-    available_recipes = [r for r in RECIPES if r.part in available_parts]
+    available_recipes = usable_recipes(puzzle.reagent_types(), available_parts)
 
     # if product size is bigger than all reagent sizes, bonder is required
-    if any(
-            all(len(r.atoms) < len(p.atoms) for r in puzzle.reagents)
-                    for p in puzzle.products
-    ):
+    if is_bonder_required(puzzle) is True:
         required_parts.append(om.Part.BONDER)
 
     # if product size is smaller than all reagent sizes, debonder is required
-    if any(
-            all(len(r.atoms) > len(p.atoms) for r in puzzle.reagents)
-                    for p in puzzle.products
-    ):
+    if is_debonder_required(puzzle) is True:
         required_parts.append(om.Part.UNBONDER)
 
     # if an atom type exists in the product and not in the reagents, and
@@ -410,8 +493,8 @@ def constraint_solve_min_cost_partlist(puzzle):
     # discover the smaller recipe list before we define a node since it
     # catches it
     available_parts = puzzle.full_parts_list()
-    available_recipes = [r for r in RECIPES if r.part in available_parts]
-    available_recipes += [recipe_reagent(t) for t in puzzle.reagent_types()]
+    available_recipes = usable_recipes(puzzle.reagent_types(), available_parts)
+    available_recipes += puzzles_reagent_recipes(puzzle)
 
     start = CostConstraintNode(available_recipes)
     for type in puzzle.product_types():
@@ -425,3 +508,31 @@ def constraint_solve_min_cost_partlist(puzzle):
     )
 
     return end.partlist
+
+
+def is_bonder_required(puzzle: om.Puzzle):
+    if all(len(p.atoms) == 1 for p in puzzle.products):
+        return False
+
+    if any((
+            all(len(r.atoms) < len(p.atoms) for r in puzzle.reagents)
+            for p in puzzle.products
+    )):
+        return True
+
+    # effectively "MAYBE / UNKNOWN / UNCERTAIN"
+    return None
+
+
+def is_debonder_required(puzzle: om.Puzzle):
+    if all(len(r.atoms) == 1 for r in puzzle.reagents):
+        return False
+
+    if any((
+            all(len(r.atoms) > len(p.atoms) for r in puzzle.reagents)
+            for p in puzzle.products
+    )):
+        return True
+
+    # effectively "MAYBE / UNKNOWN / UNCERTAIN"
+    return None

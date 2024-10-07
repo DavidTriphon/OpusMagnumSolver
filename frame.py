@@ -420,7 +420,7 @@ class Frame:
 
         # update the positions of the linked atoms and bonds
         for grab_mol, pivot_pos, angle in queue_mol_rotate:
-            grab_mol.rotate(pivot_pos, angle)
+            grab_mol.rotate(angle, pivot_pos)
         for arm, theta in queue_arm_rotate:
             arm.rotation = (arm.rotation + theta) % 6
 
