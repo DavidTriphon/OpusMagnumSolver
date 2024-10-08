@@ -213,16 +213,64 @@ PART_ACCESS_LENGTH_MIN_TRACK_SHAPES = {
 
 class RecipeApplicationConstraints:
 
-    def __init__(self, mass_produced, mass_consumed, bonds_produced,
-            bonds_consumed):
+    def __init__(self, recipe: recipes.Recipe, solution_node=None,
+    ):
         # key = atom_index
         # value = set of possible paired (recipe, iteration_id, atom_index)
-        self.mass_produced = mass_produced or []
-        self.mass_consumed = mass_consumed or []
+        self.mass_produced = []
+        self.mass_consumed = []
         # key = bond_index
         # value = set of possible paired (recipe, iteration_id, bond_index)
-        self.bonds_produced = bonds_produced or []
-        self.bonds_consumed = bonds_consumed or []
+        self.bonds_produced = []
+        self.bonds_consumed = []
+        # key = conversion_index
+        # value = set of possible paired mass (recipe, iteration_id, atom_index)
+        self.conversions_given = []
+        self.conversions_taken = []
+
+        if solution_node is None:
+            self.mass_produced = [set() for _ in recipe.produced]
+            self.mass_consumed = [set() for _ in recipe.consumed]
+            self.bonds_produced = [set() for _ in recipe.bonds_produced]
+            self.bonds_consumed = [set() for _ in recipe.bonds_consumed]
+            self.conversions_given = [set() for _ in recipe.conversions]
+            self.conversions_taken = [set() for _ in recipe.conversions]
+        else:
+            for is_mass in [True, False]:
+                for is_consumed in [True, False]:
+                    self.set(is_mass, is_consumed,
+                        [
+                            {
+                                (dest_recipe, id, index)
+                                for (dest_recipe, id, index)
+                                in solution_node.preservation_points[is_mass][
+                                not is_consumed][mat_type]
+                                if solution_node.recipe_count_bounds[
+                                       dest_recipe][1] != 0
+                            }
+                            for mat_type in recipe.get(is_mass, is_consumed)
+                        ]
+                    )
+            self.conversions_taken = [
+                {
+                    (dest_recipe, id, index)
+                    for (dest_recipe, id, index)
+                    in solution_node.preservation_points[True][True][mat_type]
+                    if solution_node.recipe_count_bounds[
+                           dest_recipe][1] != 0
+                }
+                for mat_type in recipe.get(True, False)
+            ]
+            self.conversions_given = [
+                {
+                    (dest_recipe, id, index)
+                    for (dest_recipe, id, index)
+                    in solution_node.preservation_points[True][False][mat_type]
+                    if solution_node.recipe_count_bounds[
+                           dest_recipe][1] != 0
+                }
+                for mat_type in recipe.get(True, True)
+            ]
 
     def get(self, is_mass, is_consumed):
         if is_mass:
@@ -235,6 +283,24 @@ class RecipeApplicationConstraints:
                 return self.bonds_consumed
             else:
                 return self.bonds_produced
+
+    def get_conv(self, is_consumed):
+        if is_consumed:
+            return self.conversions_taken
+        else:
+            return self.conversions_given
+
+    def set(self, is_mass, is_consumed, list_of_sets):
+        if is_mass:
+            if is_consumed:
+                self.mass_consumed = list_of_sets
+            else:
+                self.mass_produced = list_of_sets
+        else:
+            if is_consumed:
+                self.bonds_consumed = list_of_sets
+            else:
+                self.bonds_produced = list_of_sets
 
 
 class SolutionNode(graph.BaseNode):
@@ -290,61 +356,66 @@ class SolutionNode(graph.BaseNode):
             }
             for mass_type in om.Atom.TYPES
         }
-        self.valid_bond_starts = {
-            bond_type: {
-                (recipe, None, index)
-                for recipe in self.applicable_recipes
-                for index, matching_bond in enumerate(recipe.bonds_produced)
-                if bond_type == matching_bond
-            }
-            for bond_type in om.Bond.TYPES
-        }
-        self.valid_bond_ends = {
-            bond_type: {
-                (recipe, None, index)
-                for recipe in self.applicable_recipes
-                for index, matching_bond in enumerate(recipe.bonds_consumed)
-                if bond_type == matching_bond
-            }
-            for bond_type in om.Bond.TYPES
-        }
-
         mass_conversion_edges = defaultdict(dict)
         for recipe in self.applicable_recipes:
-            for start_mass, end_mass in recipe.conversions:
-                mass_conversion_edges[start_mass][end_mass] = recipe
+            for i, (start_mass, end_mass) in enumerate(recipe.conversions):
+                mass_conversion_edges[start_mass][end_mass] = (recipe, i)
         self.mass_conversion_matrix = dict()
         for mass_type in om.Atom.TYPES:
             self.mass_conversion_matrix[mass_type] = {mass_type: []}
             to_check = {mass_type}
             while to_check:
                 checking = to_check.pop()
-                for end_type, recipe in mass_conversion_edges[checking].items():
+                for end_type, recipe_ri in mass_conversion_edges[
+                    checking].items():
                     if end_type not in self.mass_conversion_matrix[mass_type]:
                         self.mass_conversion_matrix[mass_type][end_type] = \
                             self.mass_conversion_matrix[mass_type][checking] + [
-                                recipe]
+                                recipe_ri]
                         to_check.add(end_type)
         reverse_mass_conversion_matrix = defaultdict(list)
         for start, ends in self.mass_conversion_matrix.items():
             for end in ends.keys():
                 reverse_mass_conversion_matrix[end].append(start)
 
-        self.valid_mass_ends = {
-            start: {
-                option
-                for end in ends.keys()
-                for option in recipes_consume_mass[end]
+        # key = [is_mass][is_consumed][material_type]
+        # value = set of tuples (recipe, id, recipe_index)
+        self.preservation_points = {
+            # is_mass
+            True: {
+                # is not consumed / starts
+                False: {
+                    end: {
+                        option
+                        for start in starts
+                        for option in recipes_produce_mass[start]
+                    }
+                    for end, starts in reverse_mass_conversion_matrix.items()
+                },
+                # is consumed / ends
+                True: {
+                    start: {
+                        option
+                        for end in ends.keys()
+                        for option in recipes_consume_mass[end]
+                    }
+                    for start, ends in self.mass_conversion_matrix.items()
+                }
+            },
+            # not is_mass
+            False: {
+                is_consumed: {
+                    bond_type: {
+                        (recipe, None, index)
+                        for recipe in self.applicable_recipes
+                        for index, matching_bond in
+                        enumerate(recipe.get(False, is_consumed))
+                        if bond_type == matching_bond
+                    }
+                    for bond_type in om.Bond.TYPES
+                }
+                for is_consumed in [True, False]
             }
-            for start, ends in mass_conversion_edges.items()
-        }
-        self.valid_mass_starts = {
-            end: {
-                option
-                for start in starts
-                for option in recipes_produce_mass[start]
-            }
-            for end, starts in reverse_mass_conversion_matrix.items()
         }
 
         # back to your regularly scheduled constraints
@@ -361,12 +432,7 @@ class SolutionNode(graph.BaseNode):
         }
         # recipe : recipeApplicationConstraints obj (not a list)
         self.recipes_received = {
-            recipe: RecipeApplicationConstraints(
-                [set() for _ in recipe.produced],
-                [set() for _ in recipe.consumed],
-                [set() for _ in recipe.bonds_produced],
-                [set() for _ in recipe.bonds_consumed],
-            )
+            recipe: RecipeApplicationConstraints(recipe)
             for recipe in self.applicable_recipes
         }
         # recipe : int
@@ -492,6 +558,9 @@ class SolutionNode(graph.BaseNode):
         # call this when the number of options for this has been reduced.
         options = self.recipe_applications[recipe][id].get(
             is_mass, is_consumed)[this_index]
+        if len(options) == 0:
+            log.info("contradiction raised: no options for recipe=%r", recipe)
+            return False
         if len(options) == 1:
             # options are constrained, propagate:
             other_recipe, other_id, other_index = \
@@ -499,13 +568,14 @@ class SolutionNode(graph.BaseNode):
             other_type = other_recipe.get(is_mass, not is_consumed)[other_index]
             this_type = recipe.get(is_mass, is_consumed)[this_index]
             if is_consumed:
-                required_recipes = self.mass_conversion_matrix[other_type][
+                conv_recipes = self.mass_conversion_matrix[other_type][
                     this_type]
             else:
-                required_recipes = self.mass_conversion_matrix[this_type][
+                conv_recipes = self.mass_conversion_matrix[this_type][
                     other_type]
-            for required_recipe in required_recipes:
-                if not self.assign_recipe_usage(required_recipe, True):
+            for conv_recipe, conv_index in conv_recipes:
+                if not self.assign_recipe_conversion_received(conv_recipe,
+                        not is_consumed, conv_index, (recipe, id, this_index)):
                     log.info("contradiction seen (recipe=%r, index=%d)",
                         recipe, this_index)
                     return False
@@ -558,47 +628,8 @@ class SolutionNode(graph.BaseNode):
     # === methods for assigning and eliminating constraints according to
     # branching or to constraint propagation ===
 
-    def add_recipe_application_constraints(self, recipe):
-        new_application = RecipeApplicationConstraints(
-            [
-                {
-                    (dest_recipe, id, index)
-                    for (dest_recipe, id, index)
-                    in self.valid_mass_ends[atom_type]
-                    if self.recipe_count_bounds[dest_recipe][1] != 0
-                }
-                for atom_type in recipe.produced
-            ],
-            [
-                {
-                    (dest_recipe, id, index)
-                    for (dest_recipe, id, index)
-                    in
-                    self.valid_mass_starts[atom_type]
-                    if self.recipe_count_bounds[dest_recipe][1] != 0
-                }
-                for atom_type in recipe.consumed
-            ],
-            [
-                {
-                    (dest_recipe, id, index)
-                    for (dest_recipe, id, index)
-                    in
-                    self.valid_bond_ends[bond_type]
-                    if self.recipe_count_bounds[dest_recipe][1] != 0
-                }
-                for bond_type in recipe.bonds_produced
-            ],
-            [
-                {
-                    (dest_recipe, id, index)
-                    for (dest_recipe, id, index)
-                    in self.valid_bond_starts[bond_type]
-                    if self.recipe_count_bounds[dest_recipe][1] != 0
-                }
-                for bond_type in recipe.bonds_consumed
-            ]
-        )
+    def add_recipe_application_constraints(self, recipe: recipes.Recipe):
+        new_application = RecipeApplicationConstraints(recipe, self)
         self.recipe_applications[recipe].append(new_application)
         # check and propagate single options
         if not self.propagate_recipe_application_options(recipe,
@@ -647,6 +678,18 @@ class SolutionNode(graph.BaseNode):
             is_consumed, index, sender):
         receiver = self.recipes_received[recipe].get(
             is_mass, is_consumed)[index]
+        receiver |= {sender}
+        if len(receiver) > self.recipe_count_bounds[recipe][0]:
+            if not self.assign_recipe_bound_min(recipe, len(receiver)):
+                log.info(
+                    "contradiction seen (recipe=%r, sender=%r)",
+                    recipe, sender)
+                return False
+        return True
+
+    def assign_recipe_conversion_received(self, recipe, is_consumed, index,
+            sender):
+        receiver = self.recipes_received[recipe].get_conv(is_consumed)[index]
         receiver |= {sender}
         if len(receiver) > self.recipe_count_bounds[recipe][0]:
             if not self.assign_recipe_bound_min(recipe, len(receiver)):
