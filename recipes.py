@@ -3,6 +3,8 @@ import bisect
 import graph
 import om
 
+from collections import Counter
+
 
 class Recipe:
 
@@ -38,6 +40,17 @@ class Recipe:
 
     def list_required(self):
         return self.consumed + list(c for c, _ in self.conversions)
+
+    def atom_metric(self, atom_type):
+        return (self.list_created().count(atom_type)
+                - self.list_required().count(atom_type))
+
+    def atom_metrics(self):
+        positive = Counter(self.list_created())
+        negative = Counter(self.list_required())
+        for k in negative:
+            positive[k] = positive.get(k, 0) - negative[k]
+        return positive
 
     def get(self, is_mass, is_consumed):
         if is_mass:

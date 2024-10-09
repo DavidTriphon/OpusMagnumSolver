@@ -6,6 +6,8 @@ import graph
 import om
 import recipes
 
+# logging details
+
 import logging
 
 log = logging.getLogger()
@@ -17,6 +19,22 @@ handler.setFormatter(
 handler.setLevel(logging.INFO)
 log.addHandler(handler)
 
+
+# random helper method
+
+def combos(values_list, prefix=None):
+    prefix = prefix or []
+    if len(values_list) == 0:
+        return [prefix]
+    options = values_list[0]
+    return [
+        combo
+        for option in options
+        for combo in combos(values_list[1:], prefix + [option])
+    ]
+
+
+# constraint assist methods
 
 def constraint_satisfiable(constraints):
     return len(constraints) > 0
@@ -33,6 +51,10 @@ def constraint_remove(constraints, value_to_remove):
     constraints.remove(value_to_remove)
     return constraint_satisfiable(constraints)
 
+
+# default number of hexes that a part needs at minimum for a given arm length.
+# helps calculate minimum cost impacted by increasing track due to adding a
+# large part.
 
 def list_range_inclusive(maximum):
     return list(range(0, maximum + 1))
@@ -322,12 +344,12 @@ class SolutionNode(graph.BaseNode):
         usable_parts = {
             part
             for part in (
-                    set(puzzle.full_parts_list()) - om.Part.PARTS_ARMS -
-                    {om.Part.MULTIBONDER, om.Part.EQUILIBRIUM}
+                    set(puzzle.full_parts_list())
+                    | {om.Part.INPUT, om.Part.OUTPUT_STANDARD}
             )
             if any((
-                recipe in self.applicable_recipes
-                for recipe in recipes.part_recipes(part)
+                recipe.part == part
+                for recipe in self.applicable_recipes
             ))
         }
 
@@ -513,6 +535,19 @@ class SolutionNode(graph.BaseNode):
         )
         return parts_constrained
 
+    def material_sums(self):
+        return {
+            atom_type: sum((
+                self.recipe_count_bounds[recipe][0]
+                * recipe.atom_metric(atom_type)
+                for recipe in self.applicable_recipes
+            ))
+            for atom_type in om.Atom.TYPES
+        }
+
+    def does_material_sum_zero(self):
+        return all(count == 0 for type, count in self.material_sums().items())
+
     # === methods for checking how constraints propagate against each other ===
 
     def propagate_puzzle_to_partlist(self):
@@ -529,13 +564,23 @@ class SolutionNode(graph.BaseNode):
 
         return isValid
 
-    def propagate_recipe_applications_counts(self, recipe):
+    def propagate_recipe_count_min(self, recipe):
         # call me when the minimum number of recipe applications increases
-        recipe_bounds = self.recipe_count_bounds[recipe]
-        while len(self.recipe_applications[recipe]) < recipe_bounds[0]:
+        recipe_min, recipe_max = self.recipe_count_bounds[recipe]
+        while len(self.recipe_applications[recipe]) < recipe_min:
             if not self.add_recipe_application_constraints(recipe):
                 log.info("contradiction seen (recipe=%r", recipe)
                 return False
+        return True
+
+    def propagate_recipe_count_max(self, recipe):
+        # call me when the maxmimum number of recipe applications decreases
+        recipe_min, recipe_max = self.recipe_count_bounds[recipe]
+        if recipe_max == len(self.recipe_applications[recipe]):
+            # all receives bind the attachments of each atom and bond
+            # their only options are now the options in receives
+            # TODO: implement this propagation for limiting options
+            pass
         return True
 
     def propagate_recipe_application_options(self, recipe, id):
@@ -660,16 +705,37 @@ class SolutionNode(graph.BaseNode):
                 bounds[1] = 0
             return True
 
-    def assign_recipe_bound_min(self, recipe, mini):
-        current_min = self.recipe_count_bounds[recipe][0]
-        if current_min == mini:
+    def assign_recipe_bound_min(self, recipe, new_min):
+        current_min, current_max = self.recipe_count_bounds[recipe]
+        if current_min == new_min:
             return True
-        if current_min > mini:
-            log.info("contradiction raised for assigning a in incompatible "
-                     "minimum")
+        if current_max is not None and new_min > current_max:
+            log.info("contradiction raised for assigning an incompatible "
+                     "minimum (recipe=%r, bounds=(%d, %d) to (%d, %d)",
+                recipe, current_min, current_max, new_min, current_max)
             return False
-        self.recipe_count_bounds[recipe][0] = mini
-        if not self.propagate_recipe_applications_counts(recipe):
+        self.recipe_count_bounds[recipe][0] = new_min
+        # if old min was zero, make sure this part is used.
+        if current_min == 0:
+            if not self.assign_part_usage(recipe.part, True):
+                log.info("contradiction seen (recipe=%r)", recipe)
+                return False
+        if not self.propagate_recipe_count_min(recipe):
+            log.info("contradiction seen (recipe=%r)", recipe)
+            return False
+        return True
+
+    def assign_recipe_bound_max(self, recipe, new_max):
+        current_min, current_max = self.recipe_count_bounds[recipe]
+        if current_max == new_max:
+            return True
+        if new_max < current_min:
+            log.info("contradiction raised for assigning an incompatible "
+                     "maximum (recipe=%r, bounds=(%d, %d) to (%d, %d)",
+                recipe, current_min, current_max, current_min, new_max)
+            return False
+        self.recipe_count_bounds[recipe][1] = new_max
+        if not self.propagate_recipe_count_max(recipe):
             log.info("contradiction seen (recipe=%r)", recipe)
             return False
         return True
@@ -748,21 +814,89 @@ class SolutionNode(graph.BaseNode):
 
     # TODO: complete all assign and elimination methods
 
+    # generic eliminations
+
+    def eliminate_part_usage_maybes(self):
+        assert self.does_material_sum_zero()
+        for part in self.parts_used:
+            if len(self.parts_used[part]) > 1:
+                if not self.assign_part_usage(part, False):
+                    log.info(
+                        "contradiction seen while eliminating all maybe parts")
+                    return False
+        return True
+
+    def eliminate_recipe_count_bound_maybes(self):
+        for recipe, applications in self.recipe_applications.items():
+            cnt_min, cnt_max = self.recipe_count_bounds[recipe]
+            assert len(applications) == cnt_min
+            if cnt_max != cnt_min:
+                if not self.assign_recipe_bound_max(cnt_min):
+                    log.info("contradiction seen while setting all recipe "
+                             "maxes to min")
+                    return False
+        return True
+
     # === methods for checkpointing branch points ===
+
+    def find_next_part_usage_branch(self):
+        # look for a part branch where at least some parts are unsure if used.
+        for recipe, applications in self.recipe_applications.items():
+            for id, application in enumerate(applications):
+                for is_mass in [True, False]:
+                    for obj_index, options_set in enumerate(application.get(
+                            is_mass, True)):
+                        all_option_parts = {
+                            option[0].part for option in options_set
+                            if len(self.parts_used[option[0].part]) > 1
+                        }
+                        unconstrained_parts = {
+                            part for part in all_option_parts
+                            if len(self.parts_used[part]) > 1
+                        }
+                        if unconstrained_parts:
+                            part_use_value_combos = combos([
+                                [True, False]
+                                for _ in unconstrained_parts
+                            ])
+                            # don't attempt removing every option from this
+                            # bound, that would be dumb
+                            if len(unconstrained_parts) == len(
+                                    all_option_parts):
+                                part_use_value_combos.remove(
+                                    [False for _ in unconstrained_parts])
+                            return [
+                                {
+                                    part: value for part, value
+                                    in zip(unconstrained_parts, values)
+                                }
+                                for values in part_use_value_combos
+                            ]
+        return None
+
+    def find_next_recipe_application_branch(self):
+        pass
 
     def branch_and_bound(self):
         # first check parts
-        if not self.are_all_parts_constrained():
-            # target parts for next search
-            unconstrained_parts = [
-                part for part, is_used in self.parts_used.items()
-                if len(is_used) > 1
-            ]
-            unconstrained_glyphs = [
-                part for part in unconstrained_parts
-                if part in om.Part.PARTS_GLYPHS
-            ]
+        part_used_dict_options = self.find_next_part_usage_branch()
+        if part_used_dict_options:
+            children_nodes = []
+            for part_used_dict in part_used_dict_options:
+                clone = self.copy()
+                is_valid = True
+                for part, is_used in part_used_dict.items():
+                    is_valid &= clone.assign_part_usage(part, is_used)
+                if is_valid:
+                    children_nodes.append(clone)
+            return children_nodes
 
-        # if all parts are constrained, create a list of possible recipe metrics
+        # if all parts are constrained,
+        # try to remove all other parts
+        self.eliminate_part_usage_maybes()
 
         # TODO: finish branch and bound method
+
+    def is_satisfied(self):
+        # check counts on all material produced
+        pass
