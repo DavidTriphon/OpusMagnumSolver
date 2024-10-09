@@ -246,5 +246,61 @@ def main_part_solve():
     print("duration: %.2f secs" % (end - start))
 
 
+
+def test():
+    solver = z3.Solver()
+    left_count = z3.Int("left_count")
+    right_count = z3.Int("right_count")
+    right_int = z3.Int("right_int")
+    left_int = z3.Int("left_int")
+    left = z3.Function("left", z3.IntSort(), z3.IntSort())
+    right = z3.Function("right", z3.IntSort(), z3.IntSort())
+
+    rules = [
+        z3.ForAll([right_int, left_int],
+            z3.Implies(
+                z3.And(0 < right_int, right_int <= right_count,
+                    0 < left_int, left_int <= left_count),
+                (right(left_int) == right_int) == (left(right_int) == left_int)
+            )
+        ),
+        z3.ForAll(
+            [right_int],
+            z3.Implies(
+                z3.And(0 < right_int, right_int <= right_count),
+                z3.And(0 < left(right_int), left(right_int) <= left_count)
+            )
+        ),
+        z3.ForAll(
+            [left_int],
+            z3.Implies(
+                z3.And(0 < left_int, left_int <= left_count),
+                z3.And(0 < right(left_int), right(left_int) <= right_count)
+            )
+        ),
+        left_count == 3
+    ]
+    solver.add(rules)
+    expressions = [
+        left_count, right_count,
+        left(1), left(2), left(3),
+        right(1), right(2), right(3),
+    ]
+    solves = find_n_solves(expressions, solver)
+    for solve in solves:
+        print(solve)
+        for expr, val in zip(expressions, solve):
+            print(expr, val)
+
+
+def print_out(solver, expressions):
+    if solver.check() == z3.sat:
+        m = solver.model()
+        for var in expressions:
+            print(str(var), m.evaluate(var))
+    else:
+        print("unsat")
+
+
 if __name__ == '__main__':
-    main_part_solve()
+    test()
