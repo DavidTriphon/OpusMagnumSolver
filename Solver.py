@@ -48,6 +48,10 @@ def constraint_assign(constraints, remaining_value):
 
 
 def constraint_remove(constraints, value_to_remove):
+    assert value_to_remove in constraints, (
+            "value_to_remove=%r, constraints=%r" % (
+        value_to_remove, constraints)
+    )
     constraints.remove(value_to_remove)
     return constraint_satisfiable(constraints)
 
@@ -90,6 +94,12 @@ PART_ACCESSES = {
     om.Part.OUTPUT_STANDARD: [1],
     om.Part.OUTPUT_REPEATING: [1],
 }
+
+
+def get_default_access_constraints_for_part(part):
+    if isinstance(part, tuple):
+        return get_default_access_constraints_for_part(part[0])
+    return PART_ACCESSES[part]
 
 
 class TrackShape(Enum):
@@ -233,6 +243,12 @@ PART_ACCESS_LENGTH_MIN_TRACK_SHAPES = {
 }
 
 
+def get_part_access_length_min_track_shapes(part, min_accesses):
+    if isinstance(part, tuple):
+        part = part[0]
+    return PART_ACCESS_LENGTH_MIN_TRACK_SHAPES[part][min_accesses]
+
+
 class RecipeApplicationConstraints:
 
     def __init__(self, recipe: recipes.Recipe, solution_node=None,
@@ -345,7 +361,9 @@ class SolutionNode(graph.BaseNode):
             part
             for part in (
                     set(puzzle.full_parts_list())
-                    | {om.Part.INPUT, om.Part.OUTPUT_STANDARD}
+                    | {(om.Part.INPUT, i) for i in range(len(puzzle.reagents))}
+                    | {(om.Part.OUTPUT_STANDARD, i)
+                        for i in range(len(puzzle.products))}
             )
             if any((
                 recipe.part == part
@@ -440,7 +458,7 @@ class SolutionNode(graph.BaseNode):
             }
         }
 
-        # back to your regularly scheduled constraints
+        # back to your regularly scheduled constraints, deep copy all of these
 
         # recipe metrics
         self.byproduct_handling_method = [
@@ -491,13 +509,18 @@ class SolutionNode(graph.BaseNode):
 
         self.propagate_puzzle_to_partlist()
         for recipe in self.applicable_recipes:
-            if recipe.part == om.Part.OUTPUT_STANDARD:
+            if (isinstance(recipe.part, tuple)
+                    and recipe.part[0] == om.Part.OUTPUT_STANDARD):
                 if not self.assign_recipe_bound_min(recipe, 1):
                     raise ValueError("contradiction raised")
 
+    def populate(self):
+        # TODO: move init logic to populate() to make cloning easier.
+        pass
+
     def copy(self):
         # TODO copy
-        pass
+        return self
 
     def __hash__(self):
         # TODO hash
@@ -531,7 +554,7 @@ class SolutionNode(graph.BaseNode):
     def are_all_parts_constrained(self):
         parts_constrained = all(
             len(used) == 1
-                for part, used in self.parts_used
+                for part, used in self.parts_used.items()
         )
         return parts_constrained
 
@@ -576,11 +599,27 @@ class SolutionNode(graph.BaseNode):
     def propagate_recipe_count_max(self, recipe):
         # call me when the maxmimum number of recipe applications decreases
         recipe_min, recipe_max = self.recipe_count_bounds[recipe]
-        if recipe_max == len(self.recipe_applications[recipe]):
+        if recipe_max == 0:
+            # this recipe is now unusable, check if all remaining recipes for
+            # a part are unusable, if so, remove part
+            if all((
+                    self.recipe_count_bounds[r][1] == 0
+                    for r in self.applicable_recipes
+                    if r.part == recipe.part
+            )):
+                if not self.assign_part_usage(recipe.part, False):
+                    log.info("contradiction seen (recipe=%r)", recipe)
+                    return False
+            # also remove all recipe application material options that refer
+            # to this recipe:
+            if not self.eliminate_recipe_application_material_for_all(recipe):
+                log.info("contradiction seen (recipe=%r)", recipe)
+                return False
+        elif recipe_max == recipe_min:
             # all receives bind the attachments of each atom and bond
             # their only options are now the options in receives
             # TODO: implement this propagation for limiting options
-            pass
+            return True
         return True
 
     def propagate_recipe_application_options(self, recipe, id):
@@ -659,7 +698,7 @@ class SolutionNode(graph.BaseNode):
         # shape is impacted
         part_access = self.parts_accesses[part]
         min_trackshape_for_armlength = \
-            PART_ACCESS_LENGTH_MIN_TRACK_SHAPES[part][min(part_access)]
+            get_part_access_length_min_track_shapes(part, min(part_access))
         invalid_armlength_trackshapes = [
             (armlength, trackshape)
             for armlength, trackshape in self.armlength_trackshapes
@@ -684,6 +723,8 @@ class SolutionNode(graph.BaseNode):
 
         return True
 
+    # TODO: this method is unused, weigh removing it entirely, or making it
+    #  call on bound_min and bound_max
     def assign_recipe_usage(self, recipe, is_used):
         bounds = self.recipe_count_bounds[recipe]
         if is_used:
@@ -705,6 +746,55 @@ class SolutionNode(graph.BaseNode):
                 bounds[1] = 0
             return True
 
+    def assign_recipe_application_material(self, recipe, id, is_mass,
+            is_consumed, index, constraint_value):
+        if not constraint_assign(self.recipe_applications[recipe][id].get(
+                is_mass, is_consumed)[index], constraint_value):
+            log.info("contradiction seen (recipe=%r, id=%r, mass=%r, "
+                     "consumed=%r, index=%r, value=%r)", recipe,
+                id, is_mass, is_consumed, index, constraint_value)
+            return False
+        return self.propagate_recipe_application_single(recipe, id, is_mass,
+            is_consumed, index)
+
+    def eliminate_recipe_application_material_for_all(self, constraint_recipe):
+        # call this when a recipe count bound max is set to 0
+        for recipe in self.applicable_recipes:
+            for is_mass in [True, False]:
+                for is_consumed in [True, False]:
+                    for index, mat_type in enumerate(
+                            recipe.get(is_mass, is_consumed)):
+                        for (other_recipe, other_id, other_index) in \
+                                self.preservation_points[is_mass][
+                                    not is_consumed][mat_type]:
+                            if other_recipe == constraint_recipe:
+                                for id in range(
+                                        self.recipe_count_bounds[recipe][0]):
+                                    if not self.eliminate_recipe_application_material(
+                                            recipe, id, is_mass, is_consumed,
+                                            index, (constraint_recipe, None,
+                                            other_index)
+                                    ):
+                                        log.info(
+                                            "contradiction seen (recipe=%r)",
+                                            constraint_recipe)
+                                        return False
+        # I hate how ugly this method is
+        return True
+
+    def eliminate_recipe_application_material(self, recipe, id, is_mass,
+            is_consumed, index, constraint_value):
+        constraints = self.recipe_applications[recipe][id].get(is_mass,
+            is_consumed)[index]
+        if not constraint_remove(constraints, constraint_value):
+            log.info("contradiction raised")
+            return False
+        if len(constraints) == 1:
+            if not self.propagate_recipe_application_single(recipe, id,
+                    is_mass, is_consumed, index):
+                return False
+        return True
+
     def assign_recipe_bound_min(self, recipe, new_min):
         current_min, current_max = self.recipe_count_bounds[recipe]
         if current_min == new_min:
@@ -714,15 +804,18 @@ class SolutionNode(graph.BaseNode):
                      "minimum (recipe=%r, bounds=(%d, %d) to (%d, %d)",
                 recipe, current_min, current_max, new_min, current_max)
             return False
-        self.recipe_count_bounds[recipe][0] = new_min
-        # if old min was zero, make sure this part is used.
-        if current_min == 0:
-            if not self.assign_part_usage(recipe.part, True):
+        if new_min > current_min:
+            self.recipe_count_bounds[recipe][0] = new_min
+            # if old min was zero, make sure this part is used.
+            if current_min == 0:
+                if not self.assign_part_usage(recipe.part, True):
+                    log.info("contradiction seen (recipe=%r)", recipe)
+                    return False
+                if recipe.part == om.Part.INPUT:
+                    self.reagents_used[recipe.molecule_index] = [True]
+            if not self.propagate_recipe_count_min(recipe):
                 log.info("contradiction seen (recipe=%r)", recipe)
                 return False
-        if not self.propagate_recipe_count_min(recipe):
-            log.info("contradiction seen (recipe=%r)", recipe)
-            return False
         return True
 
     def assign_recipe_bound_max(self, recipe, new_max):
@@ -734,10 +827,11 @@ class SolutionNode(graph.BaseNode):
                      "maximum (recipe=%r, bounds=(%d, %d) to (%d, %d)",
                 recipe, current_min, current_max, current_min, new_max)
             return False
-        self.recipe_count_bounds[recipe][1] = new_max
-        if not self.propagate_recipe_count_max(recipe):
-            log.info("contradiction seen (recipe=%r)", recipe)
-            return False
+        if current_max is None or new_max < current_max:
+            self.recipe_count_bounds[recipe][1] = new_max
+            if not self.propagate_recipe_count_max(recipe):
+                log.info("contradiction seen (recipe=%r)", recipe)
+                return False
         return True
 
     def assign_recipe_received(self, recipe, is_mass,
@@ -766,14 +860,19 @@ class SolutionNode(graph.BaseNode):
         return True
 
     def assign_part_usage(self, part, used):
-        isValid = constraint_assign(self.parts_used[part], used)
-        if isValid and used:
-            isValid &= self.add_part_access_constraints(part)
-        return isValid
+        if not constraint_assign(self.parts_used[part], used):
+            log.info("contradiction raised when assigning part usage for %r "
+                     "to %r", part, used)
+            return False
+        if not self.add_part_access_constraints(part):
+            log.info("contradiction seen")
+            return False
+        return True
 
     def add_part_access_constraints(self, part):
         isValid = True
-        self.parts_accesses[part] = PART_ACCESSES[part]
+        self.parts_accesses[part] = get_default_access_constraints_for_part(
+            part)
         if min(self.parts_accesses[part]) > 0:
             # propagation logic
             isValid &= self.propagate_part_access_to_shapes(part)
@@ -831,7 +930,7 @@ class SolutionNode(graph.BaseNode):
             cnt_min, cnt_max = self.recipe_count_bounds[recipe]
             assert len(applications) == cnt_min
             if cnt_max != cnt_min:
-                if not self.assign_recipe_bound_max(cnt_min):
+                if not self.assign_recipe_bound_max(recipe, cnt_min):
                     log.info("contradiction seen while setting all recipe "
                              "maxes to min")
                     return False
@@ -875,7 +974,15 @@ class SolutionNode(graph.BaseNode):
         return None
 
     def find_next_recipe_application_branch(self):
-        pass
+        for recipe, applications in self.recipe_applications.items():
+            for id, application in enumerate(applications):
+                for is_mass in [True, False]:
+                    for index, options_set in enumerate(application.get(
+                            is_mass, True)):
+                        if len(options_set) > 1:
+                            # return the key and have it try every option
+                            return (recipe, id, is_mass, index)
+        return None
 
     def branch_and_bound(self):
         # first check parts
@@ -891,12 +998,82 @@ class SolutionNode(graph.BaseNode):
                     children_nodes.append(clone)
             return children_nodes
 
-        # if all parts are constrained,
-        # try to remove all other parts
-        self.eliminate_part_usage_maybes()
+        # if there are no part used options, then that means any material
+        # consumed constraints are constrained or all of their options are
+        # entirely satisfied by current part availability.
+
+        # next I should check for consumption parts that aren't constrained
+        # and choose one on an individual basis to propagate material
+        # needs.
+        unconstrained_recipe_application_key = \
+            self.find_next_recipe_application_branch()
+        if unconstrained_recipe_application_key:
+            recipe, id, is_mass, index = unconstrained_recipe_application_key
+            options = (self.recipe_applications[recipe][id].get(is_mass,
+                True)[index])
+            children_nodes = []
+            for option in options:
+                clone = self.copy()
+                if clone.assign_recipe_application_material(recipe, id,
+                        is_mass, True, index, option):
+                    children_nodes.append(clone)
+            # if every option is a contradiction, this will return no nodes,
+            # and end the branch.
+            return children_nodes
+
+        # at this point all consumers are constrained to another
+        # recipe material, but without IDs. producers are not constrained.
+        # There could be extraneous material.
+
+        if not self.does_material_sum_zero():
+            # TODO: add better byproduct handling logic than giving up
+            return []
+
+        # there is no byproduct at this point.
+        # we can constrain all recipe counts and parts available and still be
+        # satisfiable.
+        if not self.are_all_parts_constrained():
+            clone = self.copy()
+            if not clone.eliminate_recipe_count_bound_maybes():
+                log.warning(
+                    "material consumers were constrained and satisfied, "
+                    "and there was no byproduct. but yet eliminating the "
+                    "part maybes and limiting recipes caused a "
+                    "contradiction.")
+                return []
+            return [clone]
 
         # TODO: finish branch and bound method
+        return self
 
     def is_satisfied(self):
         # check counts on all material produced
+        pass
+
+    def generate_move_list(self):
+        # a STEP is a transition or recipe that affects the state of the board,
+        # such as adding a reagent, removing a product, or applying a recipe.
+
+        # a MOVE is when a molecule is moved from one position to another,
+        # generally to satisfy 1 or more pieces of material that need to
+        # overlap a glyph to process a step
+
+        # MATERIAL is either an atom or a bond that exists at some point
+        # during the state loop. it comes into existence once and
+        # leaves existence once or never.
+
+        # - to create a list of all moves that need to happen, I need a list of
+        # every step that happens in the solution.
+        # - to create a list of steps that need to happen, I need to identify
+        # material.
+        # - to identify material, I need to know the total paths of every
+        # material's start and end, and the recipes it goes through,
+        # to ensure I haven't mixed up different paths or recipes with other
+        # recipes.
+        # = ergo, ALL constraints must be constrained for material, recipe
+        # starts, and recipe ends. They can't be left loose. metrics aren't
+        # enough to generate a move list because I need to be able to
+        # identify material and know where each and every piece by identity,
+        # and not by state.
+
         pass

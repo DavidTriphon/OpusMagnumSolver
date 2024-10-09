@@ -8,8 +8,7 @@ from collections import Counter
 
 class Recipe:
 
-    def __init__(self, part: bytes,
-            molecule_index: int = None,
+    def __init__(self, part: bytes | tuple[bytes, int],
             consumed: list[int] = None,
             produced: list[int] = None,
             conversions: list[tuple[int, int]] = None,
@@ -18,7 +17,6 @@ class Recipe:
             bonds_produced: list[int] = None,
     ):
         self.part: bytes = part
-        self.molecule_index: int = molecule_index
         self.consumed: list[int] = consumed or []
         self.produced: list[int] = produced or []
         self.conversions: list[tuple[int, int]] = conversions or []
@@ -52,7 +50,7 @@ class Recipe:
             positive[k] = positive.get(k, 0) - negative[k]
         return positive
 
-    def get(self, is_mass, is_consumed):
+    def get(self, is_mass, is_consumed) -> list:
         if is_mass:
             if is_consumed:
                 return self.consumed
@@ -84,12 +82,13 @@ class Recipe:
     def __str__(self):
         str_list = []
 
-        if self.part[:6] == b"glyph-":
-            part_str = self.part[6:].decode("UTF-8")
+        if isinstance(self.part, bytes):
+            if self.part[:6] == b"glyph-":
+                part_str = self.part[6:].decode("UTF-8")
+            else:
+                part_str = self.part.decode("UTF-8")
         else:
-            part_str = self.part.decode("UTF-8")
-        if self.molecule_index is not None:
-            part_str += "[%d]" % self.molecule_index
+            part_str = "%s[%d]" % (self.part[0].decode("UTF-8"), self.part[1])
 
         if self.hovers:
             hovr_str = '(' + ", ".join([om.Atom.TYPE_NAMES[e] for e in
@@ -111,6 +110,18 @@ class Recipe:
                 comb_str = "-(%s)" % cons_str
             str_list.append(comb_str)
 
+        if self.bonds_consumed:
+            str_list.append(", ".join(
+                "- %s Bond" % om.Bond.type_name(bond_type)
+                    for bond_type in self.bonds_consumed
+            ))
+
+        if self.bonds_produced:
+            str_list.append(", ".join(
+                "+ %s Bond" % om.Bond.type_name(bond_type)
+                    for bond_type in self.bonds_produced
+            ))
+
         str_list += [
             "%s -> %s" % (om.Atom.TYPE_NAMES[r], om.Atom.TYPE_NAMES[p])
             for r, p in self.conversions]
@@ -119,28 +130,40 @@ class Recipe:
 
     def __repr__(self):
         d = {
+            "part": self.part,
             "consumed": self.consumed,
             "produced": self.produced,
             "conversions": self.conversions,
-            "hovers": self.hovers
+            "hovers": self.hovers,
+            "bonds_consumed": self.bonds_consumed,
+            "bonds_produced": self.bonds_produced,
         }
-        val_str = ", ".join("%s=%s" % (k, v) for k, v in d.items() if v)
+        val_str = ", ".join((
+            "%s=%s" % (k, v)
+            for k, v in d.items()
+            if v is not None
+        ))
 
         return "Recipe(%s, %s)" % (self.part, val_str)
 
     def __hash__(self):
         return hash((
-            self.part, self.molecule_index,
+            self.part,
             tuple(self.produced), tuple(self.consumed),
-            tuple(self.conversions), tuple(self.hovers)
+            tuple(self.conversions), tuple(self.hovers),
+            tuple(self.bonds_produced), tuple(self.bonds_consumed)
         ))
 
     def __eq__(self, other):
-        return (self.part == other.part
+        return (
+                self.part == other.part
                 and self.consumed == other.consumed
                 and self.produced == other.produced
                 and self.conversions == other.conversions
-                and self.hovers == other.hovers)
+                and self.hovers == other.hovers
+                and self.bonds_consumed == other.bonds_consumed
+                and self.bonds_produced == other.bonds_produced
+        )
 
 
 def recipe_calcify(element: int):
@@ -164,7 +187,7 @@ def recipe_project(metal: int, metal_up: int):
 
 
 def recipe_reagent(molecule: om.Molecule, molecule_index: int = None):
-    return Recipe(part=om.Part.INPUT, molecule_index=molecule_index,
+    return Recipe(part=(om.Part.INPUT, molecule_index),
         produced=[atom.type for atom in molecule.atoms],
         bonds_produced=[bond.type for bond in molecule.bonds]
     )
@@ -176,7 +199,7 @@ def puzzles_reagent_recipes(puzzle):
 
 
 def recipe_product(molecule: om.Molecule, molecule_index: int = None):
-    return Recipe(part=om.Part.OUTPUT_STANDARD, molecule_index=molecule_index,
+    return Recipe(part=(om.Part.OUTPUT_STANDARD, molecule_index),
         consumed=[atom.type for atom in molecule.atoms],
         bonds_consumed=[bond.type for bond in molecule.bonds]
     )
