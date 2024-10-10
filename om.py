@@ -735,7 +735,21 @@ class Bond:
     TRIPLEX_BLACK = 1 << 2
     TRIPLEX_YELLOW = 1 << 3
     TRIPLEX = TRIPLEX_RED | TRIPLEX_BLACK | TRIPLEX_YELLOW
-    TYPES = {NORMAL, TRIPLEX}
+    TYPES = {
+        # only 1 type of normal
+        NORMAL,
+        # 7 types of triplex (2^3 - 1 (the none one))
+        # all 3 together
+        TRIPLEX,
+        # just 1
+        TRIPLEX_RED,
+        TRIPLEX_BLACK,
+        TRIPLEX_YELLOW,
+        # just 2
+        TRIPLEX_RED | TRIPLEX_BLACK,
+        TRIPLEX_BLACK | TRIPLEX_YELLOW,
+        TRIPLEX_YELLOW | TRIPLEX_RED,
+    }
 
     @staticmethod
     def type_name(bond_type):
@@ -747,10 +761,10 @@ class Bond:
         else:
             if bond_type & Bond.TRIPLEX_RED:
                 types.append("Red")
-            if bond_type & Bond.TRIPLEX_YELLOW:
-                types.append("Yellow")
             if bond_type & Bond.TRIPLEX_BLACK:
                 types.append("Black")
+            if bond_type & Bond.TRIPLEX_YELLOW:
+                types.append("Yellow")
 
         if bond_type & ~(Bond.NORMAL | Bond.TRIPLEX):
             types.append(
@@ -760,6 +774,33 @@ class Bond:
 
         if len(types) > 1:
             type_str = "[%s]" % ", ".join(types)
+        else:
+            type_str = types[0]
+        return type_str
+
+    @staticmethod
+    def type_str_id(bond_type):
+        types = []
+        if bond_type & Bond.NORMAL:
+            types.append("normal")
+        if bond_type & Bond.TRIPLEX:
+            types.append("triplex")
+        else:
+            if bond_type & Bond.TRIPLEX_RED:
+                types.append("red")
+            if bond_type & Bond.TRIPLEX_BLACK:
+                types.append("black")
+            if bond_type & Bond.TRIPLEX_YELLOW:
+                types.append("yellow")
+
+        unknown_flags = bond_type & ~(Bond.NORMAL | Bond.TRIPLEX)
+        if unknown_flags:
+            types.append(
+                "Unknown(%d)" % (unknown_flags)
+            )
+
+        if len(types) > 1:
+            type_str = "_".join(types)
         else:
             type_str = types[0]
         return type_str

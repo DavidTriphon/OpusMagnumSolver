@@ -23,6 +23,7 @@ class Recipe:
         self.hovers: list[int] = hovers or []
         self.bonds_consumed: list[int] = bonds_consumed or []
         self.bonds_produced: list[int] = bonds_produced or []
+        self.bond_conversions: list[tuple[int, int]] = []
 
     def creates(self, element):
         return (element in self.produced or
@@ -64,19 +65,25 @@ class Recipe:
 
     def shorthand_str(self):
         if self.part == om.Part.CALCIFICATION:
-            return "calc(%s)" % om.Atom.TYPE_NAMES[self.conversions[0][0]]
+            return "calc_%s" % om.Atom.TYPE_NAMES[self.conversions[0][0]]
         if self.part == om.Part.DUPLICATION:
-            return "dupe(%s)" % om.Atom.TYPE_NAMES[self.conversions[0][1]]
+            return "dupe_%s" % om.Atom.TYPE_NAMES[self.conversions[0][1]]
         if self.part == om.Part.PURIFICATION:
-            return "purf(%s)" % om.Atom.TYPE_NAMES[self.consumed[0]]
+            return "purify_%s" % om.Atom.TYPE_NAMES[self.consumed[0]]
         if self.part == om.Part.PROJECTION:
-            return "proj(%s)" % om.Atom.TYPE_NAMES[self.conversions[0][0]]
+            return "project_%s" % om.Atom.TYPE_NAMES[self.conversions[0][0]]
         if self.part == om.Part.ANIMISMUS:
             return "animismus"
         if self.part == om.Part.DISPERSION:
             return "dispersion"
         if self.part == om.Part.UNIFICATION:
             return "unification"
+        if self.part == om.Part.BONDER:
+            return "bond"
+        if self.part == om.Part.UNBONDER:
+            return "debond"
+        if isinstance(self.part, tuple):
+            return "%s_%d" % (self.part[0].decode("UTF-8"), self.part[1])
         return str(self)
 
     def __str__(self):
@@ -255,6 +262,14 @@ RECIPES: list[Recipe] = [
     Recipe(part=om.Part.UNBONDER, bonds_consumed=[om.Bond.NORMAL]),
     Recipe(part=om.Part.TRIPLEX, bonds_produced=[om.Bond.TRIPLEX]),
 ]
+
+
+def all_puzzle_recipes(puzzle):
+    return (
+            usable_recipes(puzzle.reagent_types(), puzzle.full_parts_list())
+            + puzzles_reagent_recipes(puzzle)
+            + puzzles_product_recipes(puzzle)
+    )
 
 
 def part_recipes(parts) -> list[Recipe]:
